@@ -1,0 +1,80 @@
+/* 学生端全局主题：浅绿基调（规范见 spec/04 §9） */
+
+:root {
+  /* Element Plus 主色 → 青翠绿（light/dark 梯度一并覆盖，组件自动换色） */
+  --el-color-primary: #3ba272;
+  --el-color-primary-light-3: #6fbc97;
+  --el-color-primary-light-5: #9dd2b8;
+  --el-color-primary-light-7: #c4e4d4;
+  --el-color-primary-light-8: #d9ede1;
+  --el-color-primary-light-9: #ecf6f0;
+  --el-color-primary-dark-2: #2e825b;
+
+  --app-green-deep: #1f7a4d;
+  --app-text: #2b3a31;
+  --app-text-secondary: #5b7267;
+  --app-border-green: #e0efe5;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  color: var(--app-text);
+  background: linear-gradient(180deg, #e6f3eb 0%, #f4faf6 45%, #eef7f1 100%) fixed;
+}
+
+/* 卡片：圆角 + 浅绿描边 + 柔和绿影 */
+.el-card {
+  border-radius: 12px;
+  border: 1px solid var(--app-border-green);
+  box-shadow: 0 2px 14px rgba(35, 110, 70, 0.07);
+}
+
+.el-card__header {
+  font-weight: 600;
+  color: var(--app-green-deep);
+  border-bottom: 1px solid #e6f2ea;
+}
+
+/* 页面标题区（各视图共用） */
+.page-hero {
+  margin: 4px 0 18px;
+  padding-left: 14px;
+  border-left: 4px solid var(--el-color-primary);
+}
+
+.page-hero h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  color: var(--app-green-deep);
+}
+
+.page-hero p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--app-text-secondary);
+}
+
+/* 步骤条当前步用深绿突出 */
+.el-step__title.is-process {
+  color: var(--app-green-deep);
+  font-weight: 600;
+}
+
+/* 上传区浅绿底、悬停加深 */
+.el-upload-dragger {
+  border-color: #bfe0cd;
+  background: #f6fbf7;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.el-upload-dragger:hover {
+  border-color: var(--el-color-primary);
+  background: #eef7f1;
+}
