@@ -1,5 +1,6 @@
 import type {
   MapPurpose,
+  ProjectionInfo,
   RecommendRequest,
   Recommendation,
   RegionExtent,
@@ -123,6 +124,38 @@ function specialRules(purpose: MapPurpose, f: ExtentFeature): RuleHit[] {
     })
   }
   return hits
+}
+
+/**
+ * 纬度带 × 投影面类别的适用性结论（spec/07 §2.4）——总览「按坐标查看」时逐幅给出规则判定。
+ * 与 latitudeBandRules 同一纬度带口径：|φ|>60° 极地带宜用方位类；25°~60° 中纬度带宜用圆锥；<25° 低纬/赤道带宜用圆柱。
+ */
+export function suitabilityAt(info: ProjectionInfo, lat: number): { hit: boolean; text: string } {
+  const absLat = Math.abs(lat)
+  if (absLat > 60) {
+    return info.category === 'azimuthal'
+      ? { hit: true, text: `${absLat.toFixed(1)}° 属高纬/极地带，宜用方位类投影（以极点为中心变形最小）` }
+      : { hit: false, text: `${absLat.toFixed(1)}° 属高纬/极地带，宜用方位类投影；本幅为${categoryZh(info)}投影` }
+  }
+  if (absLat >= 25) {
+    return info.category === 'conic'
+      ? { hit: true, text: `${absLat.toFixed(1)}° 属中纬度带，宜用圆锥投影（沿标准纬线变形最小）` }
+      : { hit: false, text: `${absLat.toFixed(1)}° 属中纬度带，宜用圆锥投影；本幅为${categoryZh(info)}投影` }
+  }
+  return info.category === 'cylindrical'
+    ? { hit: true, text: `${absLat.toFixed(1)}° 属低纬/赤道带，宜用圆柱投影（切/割纬线附近变形最小）` }
+    : { hit: false, text: `${absLat.toFixed(1)}° 属低纬/赤道带，宜用圆柱投影；本幅为${categoryZh(info)}投影` }
+}
+
+const CATEGORY_ZH: Record<ProjectionInfo['category'], string> = {
+  cylindrical: '圆柱',
+  conic: '圆锥',
+  azimuthal: '方位',
+  pseudocylindrical: '伪圆柱',
+  compromise: '折中',
+}
+function categoryZh(info: ProjectionInfo): string {
+  return CATEGORY_ZH[info.category]
 }
 
 /**
