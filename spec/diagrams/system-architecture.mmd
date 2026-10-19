@@ -17,6 +17,7 @@ flowchart LR
   LLM[("通用大模型 API<br/>GPT / GLM / 通义千问")]
   LS[("本地持久化<br/>localStorage / JSON 导出")]
   IC[("Iconify 公共 API<br/>F3 智能符号搜索")]
+  CB[("腾讯云开发 CloudBase<br/>账号认证 + 云端符号库（可选）")]
 
   subgraph External["外部工具（学生本地离线操作）"]
     IF["iconfont 网站<br/>AI 生成基础符号 / 搜索页"]
@@ -27,6 +28,7 @@ flowchart LR
   AP -->|"Bearer Key"| LLM
   SM --> LS
   SM -->|"HTTPS（免密钥，CORS 开放）"| IC
+  SM -.->|"登录后按 uid 同步（VITE_TCB_ENV）"| CB
   UI -. "步骤引导 + 描述词" .-> IF
   IF -. "下载 SVG" .-> AI
   AI -. "导出规范 SVG" .-> SM

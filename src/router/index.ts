@@ -20,5 +20,10 @@ export const router = createRouter({
       component: () => import('@/views/SymbolDesignView.vue'),
       meta: { title: '符号设计向导' },
     },
+    {
+      path: '/login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { title: '登录云账号' },
+    },
   ],
 })

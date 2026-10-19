@@ -1,6 +1,20 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useAuth } from '@/modules/cloud/auth'
+
 const route = useRoute()
+const router = useRouter()
+const { user, cloudEnabled, ensureInit, logout } = useAuth()
+
+onMounted(ensureInit)
+
+async function onLogout() {
+  await logout()
+  ElMessage.success('已退出登录，符号库保留在本机')
+  if (route.path === '/login') router.push('/')
+}
 </script>
 
 <template>
@@ -15,6 +29,13 @@ const route = useRoute()
         <el-menu-item index="/smart-symbols">智能符号设计</el-menu-item>
         <el-menu-item index="/symbols">符号设计向导</el-menu-item>
       </el-menu>
+      <div v-if="cloudEnabled" class="user-area">
+        <template v-if="user">
+          <span class="user-name">{{ user.username }}</span>
+          <el-button size="small" text type="primary" @click="onLogout">退出</el-button>
+        </template>
+        <router-link v-else to="/login" class="login-link">登录云账号</router-link>
+      </div>
     </el-header>
     <el-main>
       <router-view />
@@ -63,6 +84,25 @@ const route = useRoute()
   flex: 1;
   border-bottom: none;
   background: transparent;
+}
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f7a4d;
+}
+.login-link {
+  font-size: 13px;
+  color: #2e825b;
+  text-decoration: none;
+}
+.login-link:hover {
+  text-decoration: underline;
 }
 
 /* 移动端（spec/04 §9）：收窄页头，隐藏文字标题保留标识，菜单项紧凑避免折叠 */

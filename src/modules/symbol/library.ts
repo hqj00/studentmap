@@ -1,6 +1,8 @@
 import { ref, watch } from 'vue'
 import type { SymbolRecord } from './types'
 import { mergeLibraryJson, type ImportResult } from './transfer'
+import { useAuth } from '../cloud/auth'
+import { mergeLibraries, pullLibrary, pushLibrary } from '../cloud/sync'
 
 const STORAGE_KEY = 'studentmap.symbols.v1'
 
@@ -15,11 +17,24 @@ function load(): SymbolRecord[] {
 
 /**
  * 符号库 store — 对应 spec/03 §3 步骤⑤ / §4。
- * 本期 localStorage 持久化；后端同步接口预留（见 spec/04 §8 演进路线）。
+ * 本地 localStorage 持久化；登录云账号后与云端按 uid 绑定同步（spec/06 §3）。
  */
 export function useSymbolLibrary() {
+  const { user } = useAuth()
   const symbols = ref<SymbolRecord[]>(load())
 
+  // 登录成功：拉取云端库，与本地按 id 合并后回推（spec/06 §3）
+  watch(user, async (u, prev) => {
+    if (u && !prev) {
+      const remote = await pullLibrary(u.uid)
+      if (remote) {
+        symbols.value = mergeLibraries(symbols.value, remote)
+        pushLibrary(u.uid, symbols.value).catch(() => {})
+      }
+    }
+  })
+
+  let syncTimer: ReturnType<typeof setTimeout> | undefined
   watch(
     symbols,
     (list) => {
@@ -28,6 +43,12 @@ export function useSymbolLibrary() {
       } catch {
         // localStorage 写满等异常：界面层提示导出备份后清理（spec/03 §6）
         alert('符号库本地存储失败：可能空间不足，请导出 JSON 备份后清理')
+      }
+      // 已登录：变更防抖 800ms 自动同步云端（失败不打扰本地使用）
+      if (user.value) {
+        clearTimeout(syncTimer)
+        const uid = user.value.uid
+        syncTimer = setTimeout(() => pushLibrary(uid, list).catch(() => {}), 800)
       }
     },
     { deep: true },

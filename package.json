@@ -13,6 +13,7 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@cloudbase/js-sdk": "^3.10.2",
     "d3-geo": "^3.1.1",
     "d3-geo-projection": "^4.0.0",
     "element-plus": "^2.8.8",
