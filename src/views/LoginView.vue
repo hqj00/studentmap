@@ -87,7 +87,7 @@ async function onLogout() {
           </el-button>
         </el-form-item>
       </el-form>
-      <p class="hint">第一次使用：点上方「注册」，自己设用户名和密码即可，无需老师创建账号。密码仅用于云端认证（腾讯云开发 CloudBase），任何人（含教师端）都无法查看你的密码。</p>
+      <p class="hint">第一次使用：点上方「注册」，自己设用户名和密码即可，无需老师创建账号。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
     </el-card>
   </div>
 </template>

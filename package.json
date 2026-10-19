@@ -10,6 +10,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "server": "node server/ai-proxy.mjs",
+    "class-server": "node server/class-server.mjs",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
