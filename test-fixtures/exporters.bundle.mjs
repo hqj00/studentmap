@@ -63,6 +63,18 @@ function buildProj4(info, extent) {
       return `+proj=wintri ${lon0} +datum=WGS84 +units=m +no_defs`;
     case "mollweide":
       return `+proj=moll ${lon0} +datum=WGS84 +units=m +no_defs`;
+    case "sinusoidal":
+      return `+proj=sinu ${lon0} +datum=WGS84 +units=m +no_defs`;
+    case "polyconic":
+      return `+proj=poly +lat_0=${p.originLat} ${common}`;
+    case "orthographic":
+      return `+proj=ortho +lat_0=${p.originLat} ${common}`;
+    case "gnomonic":
+      return `+proj=gnom +lat_0=${p.originLat} ${common}`;
+    case "natural-earth":
+      return `+proj=natearth ${lon0} +datum=WGS84 +units=m +no_defs`;
+    case "equal-earth":
+      return `+proj=eqearth ${lon0} +datum=WGS84 +units=m +no_defs`;
     default:
       return `+proj=eqc ${lon0} +datum=WGS84 +units=m +no_defs`;
   }

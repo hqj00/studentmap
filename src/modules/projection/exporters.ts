@@ -41,6 +41,19 @@ export function buildProj4(info: ProjectionInfo, extent: RegionExtent): string {
       return `+proj=wintri ${lon0} +datum=WGS84 +units=m +no_defs`
     case 'mollweide':
       return `+proj=moll ${lon0} +datum=WGS84 +units=m +no_defs`
+    // spec/07 §2.1 扩充条目
+    case 'sinusoidal':
+      return `+proj=sinu ${lon0} +datum=WGS84 +units=m +no_defs`
+    case 'polyconic':
+      return `+proj=poly +lat_0=${p.originLat} ${common}`
+    case 'orthographic':
+      return `+proj=ortho +lat_0=${p.originLat} ${common}`
+    case 'gnomonic':
+      return `+proj=gnom +lat_0=${p.originLat} ${common}`
+    case 'natural-earth':
+      return `+proj=natearth ${lon0} +datum=WGS84 +units=m +no_defs`
+    case 'equal-earth':
+      return `+proj=eqearth ${lon0} +datum=WGS84 +units=m +no_defs`
     default:
       return `+proj=eqc ${lon0} +datum=WGS84 +units=m +no_defs`
   }
@@ -149,7 +162,8 @@ export function buildWkt(info: ProjectionInfo, extent: RegionExtent): string {
       ].join(',')
       break
     default:
-      // Robinson / Winkel Tripel / Mollweide：无标准 EPSG 方法 ID
+      // 折中/教学类投影（Robinson、Winkel Tripel、Mollweide、Sinusoidal、Orthographic、Gnomonic、Natural Earth、Equal Earth 等）：
+      // 无常用标准 EPSG 方法 ID 或无需精确参数段，输出通用方法名
       method = `METHOD["${info.name}"]`
       params = [
         P('Longitude of natural origin', p.centralMeridian),

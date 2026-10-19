@@ -4,4 +4,6 @@ declare module 'd3-geo-projection' {
   export function geoMollweide(): GeoProjection
   export function geoRobinson(): GeoProjection
   export function geoWinkel3(): GeoProjection
+  export function geoSinusoidal(): GeoProjection
+  export function geoPolyconic(): GeoProjection
 }

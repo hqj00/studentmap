@@ -9,6 +9,7 @@ import { recommendByAI } from '@/modules/projection/aiClient'
 import { effectiveParams } from '@/modules/projection/params'
 import { buildProj4, buildWkt, epsgHint } from '@/modules/projection/exporters'
 import ProjectionPreview from '@/components/ProjectionPreview.vue'
+import ProjectionGallery from '@/components/ProjectionGallery.vue'
 import ExtentMapPicker from '@/components/ExtentMapPicker.vue'
 import CoordConverter from '@/components/CoordConverter.vue'
 
@@ -32,6 +33,8 @@ const results = ref<Recommendation[]>([])
 const refImageFailed = ref(new Set<string>())
 /** 本次推荐对应的实际范围（预览/参数/导出共用） */
 const lastExtent = ref<RegionExtent | null>(null)
+/** 18 幅投影总览展开态（spec/07 §2.2，默认展开） */
+const galleryOpen = ref(true)
 
 // 双方案对比：取前两名（spec/02 §9）
 const schemes = computed(() => results.value.slice(0, 2))
@@ -270,6 +273,17 @@ async function copyText(text: string, label: string) {
         <p class="compare-text">{{ compareReason }}</p>
       </el-card>
     </template>
+
+    <!-- 18 幅投影总览（spec/07 §2.2）：每幅含推荐缘由，点击卡片头展开/收起 -->
+    <el-card shadow="never" class="mt gallery-card">
+      <template #header>
+        <div class="gallery-toggle" @click="galleryOpen = !galleryOpen">
+          <span>投影总览 · 18 幅（每幅附推荐缘由）</span>
+          <el-button text type="primary">{{ galleryOpen ? '收起' : '展开' }}</el-button>
+        </div>
+      </template>
+      <ProjectionGallery v-show="galleryOpen" />
+    </el-card>
   </div>
 </template>
 
@@ -387,6 +401,13 @@ async function copyText(text: string, label: string) {
 .compare-text {
   margin: 0;
   line-height: 1.9;
+}
+.gallery-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
 }
 
 /* 移动端（spec/04 §9）：单列布局、控件全宽 */

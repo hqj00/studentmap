@@ -21,6 +21,11 @@ export const router = createRouter({
       meta: { title: '符号设计向导' },
     },
     {
+      path: '/qa',
+      component: () => import('@/views/MapQaView.vue'),
+      meta: { title: '地图学问答' },
+    },
+    {
       path: '/login',
       component: () => import('@/views/LoginView.vue'),
       meta: { title: '登录云账号' },

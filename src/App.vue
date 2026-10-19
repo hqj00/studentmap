@@ -26,6 +26,7 @@ async function onLogout() {
       </div>
       <el-menu mode="horizontal" :default-active="route.path" router class="app-menu">
         <el-menu-item index="/projection">地图投影推荐</el-menu-item>
+        <el-menu-item index="/qa">地图学问答</el-menu-item>
         <el-menu-item index="/smart-symbols">智能符号设计</el-menu-item>
         <el-menu-item index="/symbols">符号设计向导</el-menu-item>
       </el-menu>

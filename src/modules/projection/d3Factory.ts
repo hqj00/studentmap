@@ -4,16 +4,20 @@ import {
   geoCircle,
   geoConicConformal,
   geoConicEqualArea,
+  geoEqualEarth,
   geoEquirectangular,
+  geoGnomonic,
   geoGraticule,
   geoMercator,
+  geoNaturalEarth1,
+  geoOrthographic,
   geoPath,
   geoStereographic,
   geoTransverseMercator,
   type GeoPermissibleObjects,
   type GeoProjection,
 } from 'd3-geo'
-import { geoCylindricalEqualArea, geoMollweide, geoRobinson, geoWinkel3 } from 'd3-geo-projection'
+import { geoCylindricalEqualArea, geoMollweide, geoPolyconic, geoRobinson, geoSinusoidal, geoWinkel3 } from 'd3-geo-projection'
 import type { ProjectionInfo, RegionExtent } from './types'
 import { effectiveParams } from './params'
 
@@ -87,6 +91,25 @@ export function createProjection(
       break
     case 'mollweide':
       proj = geoMollweide()
+      break
+    // spec/07 §2.1 扩充条目
+    case 'sinusoidal':
+      proj = geoSinusoidal()
+      break
+    case 'polyconic':
+      proj = geoPolyconic()
+      break
+    case 'orthographic':
+      proj = geoOrthographic()
+      break
+    case 'gnomonic':
+      proj = geoGnomonic()
+      break
+    case 'natural-earth':
+      proj = geoNaturalEarth1()
+      break
+    case 'equal-earth':
+      proj = geoEqualEarth()
       break
     case 'equidistant-cylindrical':
     default:

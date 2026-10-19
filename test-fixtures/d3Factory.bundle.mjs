@@ -1765,6 +1765,79 @@ function equirectangular_default() {
   return projection(equirectangularRaw).scale(152.63);
 }
 
+// node_modules/d3-geo/src/projection/equalEarth.js
+var A1 = 1.340264;
+var A2 = -0.081106;
+var A3 = 893e-6;
+var A4 = 3796e-6;
+var M = sqrt(3) / 2;
+var iterations = 12;
+function equalEarthRaw(lambda, phi) {
+  var l = asin(M * sin(phi)), l2 = l * l, l6 = l2 * l2 * l2;
+  return [
+    lambda * cos(l) / (M * (A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2))),
+    l * (A1 + A2 * l2 + l6 * (A3 + A4 * l2))
+  ];
+}
+equalEarthRaw.invert = function(x, y) {
+  var l = y, l2 = l * l, l6 = l2 * l2 * l2;
+  for (var i = 0, delta, fy, fpy; i < iterations; ++i) {
+    fy = l * (A1 + A2 * l2 + l6 * (A3 + A4 * l2)) - y;
+    fpy = A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2);
+    l -= delta = fy / fpy, l2 = l * l, l6 = l2 * l2 * l2;
+    if (abs(delta) < epsilon2) break;
+  }
+  return [
+    M * x * (A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2)) / cos(l),
+    asin(sin(l) / M)
+  ];
+};
+function equalEarth_default() {
+  return projection(equalEarthRaw).scale(177.158);
+}
+
+// node_modules/d3-geo/src/projection/gnomonic.js
+function gnomonicRaw(x, y) {
+  var cy = cos(y), k = cos(x) * cy;
+  return [cy * sin(x) / k, sin(y) / k];
+}
+gnomonicRaw.invert = azimuthalInvert(atan);
+function gnomonic_default() {
+  return projection(gnomonicRaw).scale(144.049).clipAngle(60);
+}
+
+// node_modules/d3-geo/src/projection/naturalEarth1.js
+function naturalEarth1Raw(lambda, phi) {
+  var phi2 = phi * phi, phi4 = phi2 * phi2;
+  return [
+    lambda * (0.8707 - 0.131979 * phi2 + phi4 * (-0.013791 + phi4 * (3971e-6 * phi2 - 1529e-6 * phi4))),
+    phi * (1.007226 + phi2 * (0.015085 + phi4 * (-0.044475 + 0.028874 * phi2 - 5916e-6 * phi4)))
+  ];
+}
+naturalEarth1Raw.invert = function(x, y) {
+  var phi = y, i = 25, delta;
+  do {
+    var phi2 = phi * phi, phi4 = phi2 * phi2;
+    phi -= delta = (phi * (1.007226 + phi2 * (0.015085 + phi4 * (-0.044475 + 0.028874 * phi2 - 5916e-6 * phi4))) - y) / (1.007226 + phi2 * (0.015085 * 3 + phi4 * (-0.044475 * 7 + 0.028874 * 9 * phi2 - 5916e-6 * 11 * phi4)));
+  } while (abs(delta) > epsilon && --i > 0);
+  return [
+    x / (0.8707 + (phi2 = phi * phi) * (-0.131979 + phi2 * (-0.013791 + phi2 * phi2 * phi2 * (3971e-6 - 1529e-6 * phi2)))),
+    phi
+  ];
+};
+function naturalEarth1_default() {
+  return projection(naturalEarth1Raw).scale(175.295);
+}
+
+// node_modules/d3-geo/src/projection/orthographic.js
+function orthographicRaw(x, y) {
+  return [cos(y) * sin(x), sin(y)];
+}
+orthographicRaw.invert = azimuthalInvert(asin);
+function orthographic_default() {
+  return projection(orthographicRaw).scale(249.5).clipAngle(90 + epsilon);
+}
+
 // node_modules/d3-geo/src/projection/stereographic.js
 function stereographicRaw(x, y) {
   var cy = cos(y), k = 1 + cos(x) * cy;
@@ -1805,6 +1878,7 @@ var sign2 = Math.sign || function(x) {
   return x > 0 ? 1 : x < 0 ? -1 : 0;
 };
 var sin2 = Math.sin;
+var tan2 = Math.tan;
 var epsilon3 = 1e-6;
 var epsilon22 = 1e-12;
 var pi2 = Math.PI;
@@ -1876,6 +1950,17 @@ function parallel1_default(projectAt) {
   return p;
 }
 
+// node_modules/d3-geo-projection/src/sinusoidal.js
+function sinusoidalRaw(lambda, phi) {
+  return [lambda * cos2(phi), phi];
+}
+sinusoidalRaw.invert = function(x, y) {
+  return [x / cos2(y), y];
+};
+function sinusoidal_default() {
+  return projection(sinusoidalRaw).scale(152.63);
+}
+
 // node_modules/d3-geo-projection/src/cylindricalEqualArea.js
 function cylindricalEqualAreaRaw2(phi0) {
   var cosPhi0 = cos2(phi0);
@@ -1889,6 +1974,32 @@ function cylindricalEqualAreaRaw2(phi0) {
 }
 function cylindricalEqualArea_default() {
   return parallel1_default(cylindricalEqualAreaRaw2).parallel(38.58).scale(195.044);
+}
+
+// node_modules/d3-geo-projection/src/polyconic.js
+function polyconicRaw(lambda, phi) {
+  if (abs2(phi) < epsilon3) return [lambda, 0];
+  var tanPhi = tan2(phi), k = lambda * sin2(phi);
+  return [
+    sin2(k) / tanPhi,
+    phi + (1 - cos2(k)) / tanPhi
+  ];
+}
+polyconicRaw.invert = function(x, y) {
+  if (abs2(y) < epsilon3) return [x, 0];
+  var k = x * x + y * y, phi = y * 0.5, i = 10, delta;
+  do {
+    var tanPhi = tan2(phi), secPhi = 1 / cos2(phi), j = k - 2 * y * phi + phi * phi;
+    phi -= delta = (tanPhi * j + 2 * (phi - y)) / (2 + j * secPhi * secPhi + 2 * (phi - y) * tanPhi);
+  } while (abs2(delta) > epsilon3 && --i > 0);
+  tanPhi = tan2(phi);
+  return [
+    (abs2(y) < abs2(phi + 1 / tanPhi) ? asin2(x * tanPhi) : sign2(y) * sign2(x) * (acos2(abs2(x * tanPhi)) + halfPi2)) / sin2(phi),
+    phi
+  ];
+};
+function polyconic_default() {
+  return projection(polyconicRaw).scale(103.74);
 }
 
 // node_modules/d3-geo-projection/src/robinson.js
@@ -2066,6 +2177,24 @@ function createProjection(info, extent, width, height) {
       break;
     case "mollweide":
       proj = mollweide_default();
+      break;
+    case "sinusoidal":
+      proj = sinusoidal_default();
+      break;
+    case "polyconic":
+      proj = polyconic_default();
+      break;
+    case "orthographic":
+      proj = orthographic_default();
+      break;
+    case "gnomonic":
+      proj = gnomonic_default();
+      break;
+    case "natural-earth":
+      proj = naturalEarth1_default();
+      break;
+    case "equal-earth":
+      proj = equalEarth_default();
       break;
     case "equidistant-cylindrical":
     default:
