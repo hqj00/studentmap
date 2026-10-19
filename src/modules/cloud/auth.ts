@@ -79,8 +79,9 @@ export function useAuth() {
   }
 
   /** 注册：邮箱验证码三步（getVerification→verify→signUp，自动登录）。
-   * 新版 CloudBase 不允许用户名+密码直接注册（spec/06 §3 实测约束） */
-  async function register(email: string, password: string, emailCode?: string) {
+   * 新版 CloudBase 不允许用户名+密码直接注册（spec/06 §2 实测约束）；
+   * username 选填——填了之后登录时邮箱/用户名都指向同一账号（spec/06 §2 ⑥） */
+  async function register(email: string, password: string, emailCode?: string, username?: string) {
     if (!emailCode) throw new Error('请输入邮箱验证码')
     const auth = await cbAuth()
     const v = (await callAuth(
@@ -95,7 +96,8 @@ export function useAuth() {
         verification_code: emailCode,
         verification_token: vToken,
         password,
-        name: email.split('@')[0],
+        name: username || email.split('@')[0],
+        ...(username ? { username } : {}),
       }),
       '注册失败',
     )

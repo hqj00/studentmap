@@ -9,8 +9,8 @@ const router = useRouter()
 onMounted(ensureInit)
 
 const mode = ref<'login' | 'register'>('login')
-// CloudBase：邮箱 + 密码登录；注册需邮箱验证码（官方不允许用户名+密码直接注册，spec/06 §3）
-const form = reactive({ account: '', password: '', emailCode: '' })
+// CloudBase：账号（邮箱或用户名）+ 密码登录；注册需邮箱验证码，可同时绑定用户名（spec/06 §2 ⑥）
+const form = reactive({ account: '', username: '', password: '', emailCode: '' })
 const busy = ref(false)
 const sendingCode = ref(false)
 const codeSent = ref(false)
@@ -34,14 +34,21 @@ async function onSendCode() {
 
 async function submit() {
   if (!form.account.trim() || !form.password) {
-    ElMessage.warning('请输入邮箱和密码')
+    ElMessage.warning('请输入账号和密码')
     return
+  }
+  const username = form.username.trim()
+  if (mode.value === 'register' && username) {
+    if (!/^[\w一-龥-]{2,20}$/.test(username) || /^\d+$/.test(username)) {
+      ElMessage.warning('用户名需为 2~20 位字母/数字/中文，且不能是纯数字')
+      return
+    }
   }
   busy.value = true
   try {
     if (mode.value === 'register') {
-      await register(form.account.trim(), form.password, form.emailCode.trim() || undefined)
-      ElMessage.success('注册成功，已自动登录；符号库已与云端同步')
+      await register(form.account.trim(), form.password, form.emailCode.trim() || undefined, username || undefined)
+      ElMessage.success('注册成功，已自动登录；之后用邮箱或用户名都能登录')
     } else {
       await login(form.account.trim(), form.password)
       ElMessage.success('登录成功，符号库已与云端同步')
@@ -88,8 +95,16 @@ async function onLogout() {
         <el-tab-pane label="注册" name="register" />
       </el-tabs>
       <el-form label-width="80px" @submit.prevent="submit">
-        <el-form-item label="邮箱">
-          <el-input v-model="form.account" placeholder="如：xxx@qq.com" autocomplete="username" />
+        <el-form-item :label="mode === 'login' ? '账号' : '邮箱'">
+          <el-input
+            v-model="form.account"
+            :placeholder="mode === 'login' ? '邮箱或用户名' : '如：xxx@qq.com'"
+            autocomplete="username"
+          />
+        </el-form-item>
+
+        <el-form-item v-if="mode === 'register'" label="用户名">
+          <el-input v-model="form.username" placeholder="选填：设置后登录时邮箱/用户名都行（不能纯数字）" />
         </el-form-item>
 
         <el-form-item v-if="mode === 'register'" label="验证码">
@@ -117,7 +132,7 @@ async function onLogout() {
           </el-button>
         </el-form-item>
       </el-form>
-      <p class="hint">第一次使用：点上方「注册」，用邮箱收个验证码就能自助创建账号，无需老师创建。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
+      <p class="hint">第一次使用：点上方「注册」，用邮箱收个验证码就能自助创建账号，无需老师创建；注册时可顺手设置用户名，之后<strong>邮箱或用户名</strong>都能登录同一个账号。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
     </el-card>
   </div>
 </template>
