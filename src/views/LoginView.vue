@@ -39,8 +39,8 @@ async function submit() {
   }
   const username = form.username.trim().toLowerCase()
   if (mode.value === 'register' && username) {
-    if (!/^[a-z][0-9a-z_-]{5,24}$/.test(username)) {
-      ElMessage.warning('用户名需以字母开头，6~25 位小写字母/数字/下划线/连字符（不支持中文）')
+    if (!/^([a-z][0-9a-z_-]{5,24}|\d{5,24})$/.test(username)) {
+      ElMessage.warning('用户名可填学号（纯数字），或字母开头 6~25 位小写字母/数字/_/-（不支持中文）')
       return
     }
   }
@@ -48,7 +48,7 @@ async function submit() {
   try {
     if (mode.value === 'register') {
       await register(form.account.trim(), form.password, form.emailCode.trim() || undefined, username || undefined)
-      ElMessage.success('注册成功，已自动登录；之后用邮箱或用户名都能登录')
+      ElMessage.success('注册成功，已自动登录；之后用邮箱或用户名/学号都能登录')
     } else {
       await login(form.account.trim(), form.password)
       ElMessage.success('登录成功，符号库已与云端同步')
@@ -98,13 +98,13 @@ async function onLogout() {
         <el-form-item :label="mode === 'login' ? '账号' : '邮箱'">
           <el-input
             v-model="form.account"
-            :placeholder="mode === 'login' ? '邮箱或用户名' : '如：xxx@qq.com'"
+            :placeholder="mode === 'login' ? '邮箱 / 用户名 / 学号' : '如：xxx@qq.com'"
             autocomplete="username"
           />
         </el-form-item>
 
         <el-form-item v-if="mode === 'register'" label="用户名">
-          <el-input v-model="form.username" placeholder="选填：字母开头 6~25 位小写字母/数字/_/-，如 hanqingjing" />
+          <el-input v-model="form.username" placeholder="选填：学号或字母开头的别名，如 20230101 / hanqingjing" />
         </el-form-item>
 
         <el-form-item v-if="mode === 'register'" label="验证码">
@@ -132,7 +132,7 @@ async function onLogout() {
           </el-button>
         </el-form-item>
       </el-form>
-      <p class="hint">第一次使用：点上方「注册」，用邮箱收个验证码就能自助创建账号，无需老师创建；注册时可顺手设置用户名，之后<strong>邮箱或用户名</strong>都能登录同一个账号。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
+      <p class="hint">第一次使用：点上方「注册」，用邮箱收个验证码就能自助创建账号，无需老师创建；注册时可顺手设置用户名（可填<strong>学号</strong>），之后<strong>邮箱、用户名或学号</strong>都能登录同一个账号。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
     </el-card>
   </div>
 </template>

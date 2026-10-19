@@ -34,6 +34,13 @@ async function callAuth<T>(p: Promise<T>, fallback: string): Promise<T> {
   }
 }
 
+/** 服务端 username 强制字母开头（^[a-z][0-9a-z_-]{5,24}$，spec/06 §2 ③）；
+ * 学号等纯数字账号统一加 s 前缀作为登录别名，用户无感 */
+function normalizeAccount(input: string): string {
+  const a = input.trim().toLowerCase()
+  return /^\d+$/.test(a) ? `s${a}` : a
+}
+
 /** CloudBase 登录态读取 */
 async function cloudbaseLoginState(): Promise<CloudUser | null> {
   const app = await getCloudApp()
@@ -69,10 +76,10 @@ export function useAuth() {
     if (!pendingVerificationId) throw new Error('未获取到 verification_id')
   }
 
-  /** 登录：邮箱/用户名 + 密码（auth.signIn，spec/06 §3） */
+  /** 登录：邮箱/用户名/学号 + 密码（auth.signIn，spec/06 §3） */
   async function login(account: string, password: string) {
     const auth = await cbAuth()
-    await callAuth(auth.signIn({ username: account, password }), '登录失败')
+    await callAuth(auth.signIn({ username: normalizeAccount(account), password }), '登录失败')
     const u = await cloudbaseLoginState()
     if (!u) throw new Error('登录失败：未获取到登录态')
     user.value = u
@@ -83,8 +90,8 @@ export function useAuth() {
    * username 选填——填了之后登录时邮箱/用户名都指向同一账号（spec/06 §2 ⑥） */
   async function register(email: string, password: string, emailCode?: string, username?: string) {
     if (!emailCode) throw new Error('请输入邮箱验证码')
-    // 服务端 username 强制 ^[a-z][0-9a-z_-]{5,24}$（spec/06 §2 ③ 实测）：统一小写后传入
-    const uname = username?.trim().toLowerCase() || undefined
+    // 服务端 username 强制 ^[a-z][0-9a-z_-]{5,24}$（spec/06 §2 ③ 实测）：统一小写、纯数字学号加 s 前缀
+    const uname = username ? normalizeAccount(username) : undefined
     const auth = await cbAuth()
     const v = (await callAuth(
       auth.verify({ verification_id: pendingVerificationId, verification_code: emailCode }),
