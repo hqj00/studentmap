@@ -15,13 +15,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // AI 代理（server/ai-proxy.mjs，8787）
-      '/api/ai': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-      },
-      // 班级自建服务器（server/class-server.mjs，8788）：/api/ping、/api/auth/*、/api/library
       '/api': {
-        target: 'http://localhost:8788',
+        target: 'http://localhost:8787',
         changeOrigin: true,
       },
     },

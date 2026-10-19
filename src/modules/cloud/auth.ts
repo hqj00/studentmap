@@ -1,5 +1,5 @@
-import { computed, readonly, ref } from 'vue'
-import { cloudProvider, detectProvider, getCloudApp } from './client'
+import { readonly, ref } from 'vue'
+import { cloudEnabled, getCloudApp } from './client'
 
 export interface CloudUser {
   uid: string
@@ -7,24 +7,7 @@ export interface CloudUser {
 }
 
 const user = ref<CloudUser | null>(null)
-const token = ref<string | null>(null)
-const TOKEN_KEY = 'studentmap.classToken'
 let initialized = false
-
-/** 班级服务器 API（spec/06 §2.2） */
-async function classRequest(path: string, body?: unknown) {
-  const resp = await fetch(`/api${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token.value ? { Authorization: `Bearer ${token.value}` } : {}),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const data = await resp.json().catch(() => ({}))
-  if (!resp.ok) throw new Error((data as { error?: string }).error ?? `请求失败（HTTP ${resp.status}）`)
-  return data as Record<string, unknown>
-}
 
 /** CloudBase 认证句柄（SDK 类型声明较散，按窄接口使用） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,8 +38,7 @@ async function callAuth<T>(p: Promise<T>, fallback: string): Promise<T> {
 async function cloudbaseLoginState(): Promise<CloudUser | null> {
   const app = await getCloudApp()
   if (!app) return null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = await (app.auth() as any).getLoginState()
+  const state = await (app.auth() as AuthHandle).getLoginState()
   const u = state?.user
   return u?.uid ? { uid: u.uid, username: u.username ?? u.email ?? u.uid } : null
 }
@@ -65,31 +47,18 @@ async function cloudbaseLoginState(): Promise<CloudUser | null> {
 let pendingVerificationId = ''
 
 export function useAuth() {
-  /** 应用启动时探测后端并恢复登录态（spec/06 §1/§3） */
+  /** 应用启动时恢复登录态（SDK 凭据存 localStorage，长期免登） */
   async function ensureInit() {
-    if (initialized) return
+    if (!cloudEnabled || initialized) return
     initialized = true
-    const provider = await detectProvider()
-    if (provider === 'class-server') {
-      token.value = localStorage.getItem(TOKEN_KEY)
-      if (!token.value) return
-      try {
-        const d = await classRequest('/auth/me')
-        user.value = { uid: String(d.username), username: String(d.username) }
-      } catch {
-        token.value = null
-        localStorage.removeItem(TOKEN_KEY)
-      }
-    } else if (provider === 'cloudbase') {
-      try {
-        user.value = await cloudbaseLoginState()
-      } catch {
-        // 云端不可达 → 保持本地模式
-      }
+    try {
+      user.value = await cloudbaseLoginState()
+    } catch {
+      // 云端不可达 → 保持本地模式
     }
   }
 
-  /** 发送邮箱验证码（仅 CloudBase；注册流程第一步，spec/06 §3） */
+  /** 发送邮箱验证码（注册第一步，spec/06 §3） */
   async function sendEmailCode(email: string) {
     const auth = await cbAuth()
     const res = (await callAuth(auth.getVerification({ email }), '发送验证码失败')) as {
@@ -100,15 +69,8 @@ export function useAuth() {
     if (!pendingVerificationId) throw new Error('未获取到 verification_id')
   }
 
-  /** 登录：班级服务器=用户名+密码；CloudBase=邮箱/用户名+密码（auth.signIn） */
+  /** 登录：邮箱/用户名 + 密码（auth.signIn，spec/06 §3） */
   async function login(account: string, password: string) {
-    if (cloudProvider.value === 'class-server') {
-      const d = await classRequest('/auth/login', { username: account, password })
-      token.value = String(d.token)
-      localStorage.setItem(TOKEN_KEY, token.value)
-      user.value = { uid: String(d.username), username: String(d.username) }
-      return
-    }
     const auth = await cbAuth()
     await callAuth(auth.signIn({ username: account, password }), '登录失败')
     const u = await cloudbaseLoginState()
@@ -116,14 +78,9 @@ export function useAuth() {
     user.value = u
   }
 
-  /** 注册：班级服务器=用户名+密码直注册；CloudBase=邮箱验证码三步（getVerification→verify→signUp，自动登录） */
-  async function register(account: string, password: string, emailCode?: string) {
-    if (cloudProvider.value === 'class-server') {
-      await classRequest('/auth/register', { username: account, password })
-      await login(account, password)
-      return
-    }
-    // CloudBase：account 为邮箱（官方不允许用户名+密码直接注册，spec/06 §3）
+  /** 注册：邮箱验证码三步（getVerification→verify→signUp，自动登录）。
+   * 新版 CloudBase 不允许用户名+密码直接注册（spec/06 §3 实测约束） */
+  async function register(email: string, password: string, emailCode?: string) {
     if (!emailCode) throw new Error('请输入邮箱验证码')
     const auth = await cbAuth()
     const v = (await callAuth(
@@ -134,11 +91,11 @@ export function useAuth() {
     if (!vToken) throw new Error('验证码校验失败：未获取到 verification_token')
     await callAuth(
       auth.signUp({
-        email: account,
+        email,
         verification_code: emailCode,
         verification_token: vToken,
         password,
-        name: account.split('@')[0],
+        name: email.split('@')[0],
       }),
       '注册失败',
     )
@@ -149,25 +106,14 @@ export function useAuth() {
   }
 
   async function logout() {
-    if (cloudProvider.value === 'cloudbase') {
-      try {
-        const auth = await cbAuth()
-        await auth.signOut()
-      } catch {
-        // 忽略云端登出失败
-      }
+    try {
+      const auth = await cbAuth()
+      await auth.signOut()
+    } catch {
+      // 忽略云端登出失败
     }
-    token.value = null
-    localStorage.removeItem(TOKEN_KEY)
     user.value = null
   }
 
-  /** 页头/登录页据此显示账号区（探测完成前为 local，不闪烁展示登录入口） */
-  const cloudEnabled = computed(() => cloudProvider.value !== 'local')
   return { user: readonly(user), cloudEnabled, ensureInit, login, register, logout, sendEmailCode }
-}
-
-/** 班级服务器会话凭据（sync 用） */
-export function getClassToken(): string | null {
-  return token.value
 }

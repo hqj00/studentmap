@@ -1,25 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/modules/cloud/auth'
-import { cloudProvider } from '@/modules/cloud/client'
 
 const { user, cloudEnabled, ensureInit, login, register, logout, sendEmailCode } = useAuth()
 const router = useRouter()
 onMounted(ensureInit)
 
-const PROVIDER_LABELS = {
-  'class-server': '班级服务器',
-  cloudbase: 'CloudBase 云端',
-  local: '纯本地',
-} as const
-
-const isClassServer = computed(() => cloudProvider.value === 'class-server')
-const isCloudbase = computed(() => cloudProvider.value === 'cloudbase')
-
 const mode = ref<'login' | 'register'>('login')
-// 班级服务器用用户名；CloudBase 用邮箱（官方不允许用户名+密码直接注册，spec/06 §3）
+// CloudBase：邮箱 + 密码登录；注册需邮箱验证码（官方不允许用户名+密码直接注册，spec/06 §3）
 const form = reactive({ account: '', password: '', emailCode: '' })
 const busy = ref(false)
 const sendingCode = ref(false)
@@ -44,7 +34,7 @@ async function onSendCode() {
 
 async function submit() {
   if (!form.account.trim() || !form.password) {
-    ElMessage.warning(isCloudbase.value ? '请输入邮箱和密码' : '请输入用户名和密码')
+    ElMessage.warning('请输入邮箱和密码')
     return
   }
   busy.value = true
@@ -74,19 +64,19 @@ async function onLogout() {
   <div class="page">
     <div class="page-hero">
       <h2>登录云账号</h2>
-      <p>登录后符号库存到你自己的账号下，换电脑也能取回；不登录则保持本机本地模式</p>
+      <p>登录后符号库存到你自己的云端账号下，换电脑也能取回；不登录则保持本机本地模式</p>
     </div>
 
     <el-alert
       v-if="!cloudEnabled"
       type="warning"
       :closable="false"
-      title="当前为纯本地模式（未探测到班级服务器、未配置云端环境），教师部署后此处即可注册/登录"
+      title="当前部署未配置云端环境（VITE_TCB_ENV），为纯本地模式；教师部署时配置后此处即可注册/登录"
     />
 
     <el-card v-else-if="user" shadow="never" class="account-card">
       <template #header>当前账号</template>
-      <p>已登录：<b>{{ user.username }}</b> <el-tag size="small" type="success">{{ PROVIDER_LABELS[cloudProvider] }}</el-tag></p>
+      <p>已登录：<b>{{ user.username }}</b> <el-tag size="small" type="success">CloudBase 云端</el-tag></p>
       <p class="hint">你的符号库已绑定到该账号，改动会自动同步。</p>
       <el-button type="primary" @click="router.push('/symbols')">去符号库</el-button>
       <el-button @click="onLogout">退出登录</el-button>
@@ -98,16 +88,11 @@ async function onLogout() {
         <el-tab-pane label="注册" name="register" />
       </el-tabs>
       <el-form label-width="80px" @submit.prevent="submit">
-        <el-form-item :label="isCloudbase ? '邮箱' : '用户名'">
-          <el-input
-            v-model="form.account"
-            :placeholder="isCloudbase ? '如：xxx@qq.com' : '建议使用学号或姓名拼音'"
-            autocomplete="username"
-          />
+        <el-form-item label="邮箱">
+          <el-input v-model="form.account" placeholder="如：xxx@qq.com" autocomplete="username" />
         </el-form-item>
 
-        <!-- CloudBase 注册：邮箱验证码（spec/06 §3） -->
-        <el-form-item v-if="isCloudbase && mode === 'register'" label="验证码">
+        <el-form-item v-if="mode === 'register'" label="验证码">
           <div class="code-row">
             <el-input v-model="form.emailCode" placeholder="邮箱收到的验证码" class="code-input" />
             <el-button :loading="sendingCode" @click="onSendCode">
@@ -132,11 +117,7 @@ async function onLogout() {
           </el-button>
         </el-form-item>
       </el-form>
-      <p class="hint">
-        第一次使用：点上方「注册」自助创建账号，无需老师创建。密码只存加盐哈希，任何人（含教师端）都看不到明文。
-        <span v-if="isCloudbase">注册需邮箱收验证码；之后用邮箱 + 密码登录。</span>
-      </p>
-      <p class="hint provider-hint">当前后端：{{ PROVIDER_LABELS[cloudProvider] }}</p>
+      <p class="hint">第一次使用：点上方「注册」，用邮箱收个验证码就能自助创建账号，无需老师创建。密码只存加盐哈希，任何人（含教师端）都看不到明文。</p>
     </el-card>
   </div>
 </template>
@@ -160,10 +141,5 @@ async function onLogout() {
 }
 .code-input {
   flex: 1;
-}
-.provider-hint {
-  margin-bottom: 0;
-  text-align: right;
-  font-size: 12px;
 }
 </style>
