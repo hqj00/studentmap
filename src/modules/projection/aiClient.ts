@@ -2,7 +2,8 @@ import type { RecommendRequest, Recommendation } from './types'
 import { findProjection, PROJECTION_KB, resolveExtent, REGION_PRESETS } from './presets'
 import { PURPOSE_LABELS } from './types'
 
-const TIMEOUT_MS = 15_000
+// 慢模型（如中转站上的思考型模型）首字可能 60s+，前端等待上限 125s，覆盖代理的 115s（spec/01 NFR-1）
+const TIMEOUT_MS = 125_000
 
 /** AI 代理地址：开发期走 vite 代理（/api）；线上用 VITE_AI_BASE_URL 指向部署好的代理（spec/04 §5/§7） */
 const AI_BASE = (import.meta.env.VITE_AI_BASE_URL ?? '/api').replace(/\/+$/, '')

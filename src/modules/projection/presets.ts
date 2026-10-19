@@ -44,6 +44,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     pros: ['等角，局部形状与方向保真，恒向线为直线，海图标准投影'],
     cons: ['高纬面积严重夸大（格陵兰失真），不适合全球面积对比'],
     epsgHint: 'EPSG:3395（World Mercator）；Web 墨卡托另有 EPSG:3857',
+    refImage: {
+      url: './ref-images/mercator.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'transverse-mercator',
@@ -55,6 +59,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     pros: ['分带内变形极小，等角保形，是我国大比例尺地形图的国家标准投影'],
     cons: ['不适合大范围成图（需分带），东西跨度大时带边缘变形迅速增大'],
     epsgHint: '按分带注册：CGCS2000 高斯-克吕格 6°带 EPSG:4491–4501、3°带 EPSG:4513–4533（以 EPSG 注册表为准）',
+    refImage: {
+      url: './ref-images/transverse-mercator.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons（横轴墨卡托世界全图）',
+    },
   },
   {
     id: 'lambert-conformal-conic',
@@ -65,6 +73,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '中纬度东西延展区域的气象图、航空图，保持角度与局部形状',
     pros: ['等角保形态，中纬度东西向区域变形小，气象/航空图标准'],
     cons: ['面积变形明显，不适合面积敏感的统计专题图'],
+    refImage: {
+      url: './ref-images/lambert-conformal-conic.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'albers-equal-area-conic',
@@ -76,6 +88,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '中纬度统计专题图；中国全图惯例参数：双标准纬线 25°N/47°N，中央经线 105°E',
     pros: ['面积严格相等，统计专题图首选；中纬东西向区域整体变形小'],
     cons: ['角度与形状有变形，远离标准纬线处形状失真'],
+    refImage: {
+      url: './ref-images/albers-equal-area-conic.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'azimuthal-equidistant',
@@ -86,6 +102,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '极地地区、自中心点向外的距离与方位量算',
     pros: ['自投影中心的距离与方位严格正确，极地与航线规划直观'],
     cons: ['仅中心点性质可靠，越靠边缘形状与面积变形越大'],
+    refImage: {
+      url: './ref-images/azimuthal-equidistant.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'polar-stereographic',
@@ -96,6 +116,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '极地航海、航空与科考用图（等角）',
     pros: ['极区等角保形，是极地科考与导航的标准投影'],
     cons: ['只适合极区，中低纬度无法使用'],
+    refImage: {
+      url: './ref-images/polar-stereographic.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'lambert-azimuthal-equal-area',
@@ -106,6 +130,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '大洲尺度、极地地区的等积专题制图',
     pros: ['大洲/极区面积保真，兼顾一定的形状保持'],
     cons: ['角度变形随远离投影中心而增大'],
+    refImage: {
+      url: './ref-images/lambert-azimuthal-equal-area.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'equidistant-cylindrical',
@@ -116,6 +144,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '低纬度简易制图与教学演示（经纬网为方格，直观易懂）',
     pros: ['经纬网为规则方格，计算与绘制最简单，教学演示友好'],
     cons: ['等角、等积性质都不具备，各类变形全面存在'],
+    refImage: {
+      url: './ref-images/equidistant-cylindrical.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'gall-peters',
@@ -126,6 +158,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '低纬度及世界的面积对比专题图',
     pros: ['面积严格相等，全球面积对比公平（标准纬线 45°）'],
     cons: ['低纬形状拉伸明显，观感差，不适合挂图'],
+    refImage: {
+      url: './ref-images/gall-peters.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'robinson',
@@ -136,6 +172,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '世界挂图、教学演示：各类变形均衡，视觉效果好',
     pros: ['各类变形折中均衡，视觉舒适，世界挂图常用'],
     cons: ['等角等积都不严格，不可用于精确量算'],
+    refImage: {
+      url: './ref-images/robinson.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'winkel-tripel',
@@ -146,6 +186,11 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '世界全图（《国家地理》曾采用），折中变形',
     pros: ['折中方案中观感自然，经线弯曲平滑，世界全图常用'],
     cons: ['无严格几何性质，面积与角度均不可直接量算'],
+    refImage: {
+      // Commons 文件名用英式拼写 "Winkel triple projection SW.jpg"
+      url: './ref-images/winkel-tripel.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
   {
     id: 'mollweide',
@@ -156,6 +201,10 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     suitableFor: '世界范围的统计分布图（如人口、气候带分布）',
     pros: ['全球等积，分布类专题图面积可比'],
     cons: ['边缘（尤其高纬两侧）角度变形大，形状失真明显'],
+    refImage: {
+      url: './ref-images/mollweide.jpg',
+      credit: 'Strebe, CC BY-SA 3.0, Wikimedia Commons',
+    },
   },
 ]
 

@@ -3,10 +3,10 @@ var FORBIDDEN_TAGS = ["script", "foreignObject"];
 function checkAndNormalizeSvg(svgText) {
   const issues = [];
   const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
-  if (doc.querySelector("parsererror")) {
+  const root = doc.documentElement;
+  if (!root || doc.querySelector("parsererror")) {
     return { ok: false, issues: [{ level: "error", message: "SVG \u65E0\u6CD5\u89E3\u6790\uFF0C\u8BF7\u786E\u8BA4\u6587\u4EF6\u5B8C\u6574\u4E14\u4E3A\u77E2\u91CF SVG\uFF08\u975E\u4F4D\u56FE\u6539\u540D\uFF09" }] };
   }
-  const root = doc.documentElement;
   if (root.tagName.toLowerCase() !== "svg") {
     return { ok: false, issues: [{ level: "error", message: "\u6839\u5143\u7D20\u4E0D\u662F <svg>" }] };
   }

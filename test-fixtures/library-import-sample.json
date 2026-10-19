@@ -1,0 +1,24 @@
+[
+  {
+    "id": "demo1",
+    "name": "气象台站",
+    "category": "point",
+    "tags": ["气象", "1:25万"],
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><circle cx=\"32\" cy=\"32\" r=\"20\" fill=\"currentColor\"/></svg>",
+    "source": "iconfont-ai",
+    "createdAt": 1760000000000
+  },
+  {
+    "id": "dup1",
+    "name": "加油站",
+    "category": "point",
+    "tags": [],
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"12\" y=\"12\" width=\"40\" height=\"40\" fill=\"currentColor\"/></svg>",
+    "source": "illustrator",
+    "createdAt": 1760000001000
+  },
+  {
+    "id": "bad1",
+    "name": "缺svg字段的坏记录"
+  }
+]

@@ -10,6 +10,7 @@ import { effectiveParams } from '@/modules/projection/params'
 import { buildProj4, buildWkt, epsgHint } from '@/modules/projection/exporters'
 import ProjectionPreview from '@/components/ProjectionPreview.vue'
 import ExtentMapPicker from '@/components/ExtentMapPicker.vue'
+import CoordConverter from '@/components/CoordConverter.vue'
 
 const presetGroups = [...new Set(REGION_PRESETS.map((p) => p.group))]
 
@@ -27,6 +28,8 @@ const loading = ref(false)
 const errorMsg = ref('')
 const aiDegraded = ref(false)
 const results = ref<Recommendation[]>([])
+/** 参考影像加载失败的投影 id（整块隐藏，不影响其他内容） */
+const refImageFailed = ref(new Set<string>())
 /** 本次推荐对应的实际范围（预览/参数/导出共用） */
 const lastExtent = ref<RegionExtent | null>(null)
 
@@ -58,7 +61,7 @@ function validate(): string | null {
 }
 
 async function submit() {
-  errorMsg.value = validate()
+  errorMsg.value = validate() ?? ''
   if (errorMsg.value) return
   loading.value = true
   aiDegraded.value = false
@@ -174,7 +177,10 @@ async function copyText(text: string, label: string) {
           </el-select>
         </el-form-item>
         <el-form-item label="大模型增强">
-          <el-checkbox v-model="form.useAI">使用大模型解释与排序（需先启动 AI 代理：npm run server）</el-checkbox>
+          <div class="ai-toggle">
+            <el-checkbox v-model="form.useAI">使用大模型解释与排序</el-checkbox>
+            <p class="ai-hint">未勾选或 AI 异常时自动降级为规则引擎推荐；本地开发需先 npm run server</p>
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="loading" @click="submit">获取投影推荐</el-button>
@@ -218,6 +224,19 @@ async function copyText(text: string, label: string) {
           <ProjectionPreview :info="rec.projection" :extent="lastExtent" />
           <p class="legend">灰网：经纬网 · 橙圈：Tissot 变形椭圆（越扁/越大＝变形越大） · 绿框：制图范围</p>
 
+          <!-- 参考影像（spec/02 §10）：与本应用生成的示意图上下结构，加载失败整块隐藏 -->
+          <div v-if="rec.projection.refImage && !refImageFailed.has(rec.projection.id)" class="ref-image">
+            <img
+              :src="rec.projection.refImage.url"
+              :alt="`${rec.projection.zhName}世界全图效果`"
+              loading="lazy"
+              @error="refImageFailed.add(rec.projection.id)"
+            />
+            <p class="legend">
+              参考影像：{{ rec.projection.zhName }}（世界全图效果） · {{ rec.projection.refImage.credit }}
+            </p>
+          </div>
+
           <p><b>参数：</b>{{ paramsText(rec) }}</p>
           <p><b>推荐理由：</b>{{ rec.reason }}</p>
 
@@ -240,6 +259,9 @@ async function copyText(text: string, label: string) {
               复制 WKT
             </el-button>
           </div>
+
+          <el-divider />
+          <CoordConverter :info="rec.projection" :extent="lastExtent" />
         </el-card>
       </div>
 
@@ -296,6 +318,14 @@ async function copyText(text: string, label: string) {
   color: var(--el-color-danger);
   margin-left: 12px;
 }
+.ai-toggle {
+  line-height: 1.4;
+}
+.ai-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
 .scheme-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -321,6 +351,14 @@ async function copyText(text: string, label: string) {
   margin: 6px 0 0;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.ref-image img {
+  width: 100%;
+  display: block;
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1px solid #e0efe5;
+  background: #f3faf6;
 }
 .pros-cons {
   display: grid;
@@ -349,5 +387,32 @@ async function copyText(text: string, label: string) {
 .compare-text {
   margin: 0;
   line-height: 1.9;
+}
+
+/* 移动端（spec/04 §9）：单列布局、控件全宽 */
+@media (max-width: 768px) {
+  .scheme-grid {
+    grid-template-columns: 1fr;
+  }
+  .pros-cons {
+    grid-template-columns: 1fr;
+  }
+  .preset-select,
+  .purpose-select {
+    width: 100%;
+  }
+  .preset-select.ml {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+  .extent-inputs {
+    flex-direction: column;
+  }
+  .extent-inputs .el-input-number {
+    width: 100%;
+  }
+  .picker-wrap {
+    max-width: 100%;
+  }
 }
 </style>

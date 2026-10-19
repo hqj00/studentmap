@@ -12,7 +12,8 @@ const route = useRoute()
       </div>
       <el-menu mode="horizontal" :default-active="route.path" router class="app-menu">
         <el-menu-item index="/projection">地图投影推荐</el-menu-item>
-        <el-menu-item index="/symbols">地图符号设计</el-menu-item>
+        <el-menu-item index="/smart-symbols">智能符号设计</el-menu-item>
+        <el-menu-item index="/symbols">符号设计向导</el-menu-item>
       </el-menu>
     </el-header>
     <el-main>
@@ -62,5 +63,23 @@ const route = useRoute()
   flex: 1;
   border-bottom: none;
   background: transparent;
+}
+
+/* 移动端（spec/04 §9）：收窄页头，隐藏文字标题保留标识，菜单项紧凑避免折叠 */
+@media (max-width: 640px) {
+  .app-header {
+    gap: 12px;
+    padding: 0 12px;
+  }
+  .app-title {
+    display: none;
+  }
+  .app-menu {
+    min-width: 0;
+  }
+  .app-menu :deep(.el-menu-item) {
+    padding: 0 10px;
+    font-size: 13px;
+  }
 }
 </style>

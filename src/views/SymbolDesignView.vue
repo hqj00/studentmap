@@ -6,8 +6,10 @@ import type { SymbolCategory, SymbolSource } from '@/modules/symbol/types'
 import { CATEGORY_LABELS, SOURCE_LABELS } from '@/modules/symbol/types'
 import { checkAndNormalizeSvg, type SvgCheckResult } from '@/modules/symbol/standardize'
 import { useSymbolLibrary } from '@/modules/symbol/library'
+import { useIsMobile } from '@/utils/useIsMobile'
 
-const { symbols, add, remove, exportJson } = useSymbolLibrary()
+const { symbols, add, remove, exportJson, importJson } = useSymbolLibrary()
+const isMobile = useIsMobile()
 
 // 向导步骤（spec/03 §3：一次只展示一步，前置条件未满足则禁下一步）
 const STEPS = ['需求定义', 'iconfont AI 素材', 'Illustrator 设计', '上传与校验', '入库'] as const
@@ -94,6 +96,20 @@ function downloadJson() {
   URL.revokeObjectURL(a.href)
 }
 
+// 导入他人分享的符号库 JSON（合并去重，spec/03 §7 用例6）
+async function onImportFile(file: UploadFile) {
+  const raw = file.raw
+  if (!raw) return
+  const result = importJson(await raw.text())
+  if (!result.ok) {
+    ElMessage.error(`导入失败：${result.error}`)
+    return
+  }
+  ElMessage.success(
+    `导入完成：新增 ${result.added} 个符号` + (result.skipped ? `，跳过 ${result.skipped} 条重复/无效记录` : ''),
+  )
+}
+
 const darkPreview = ref(false)
 const levelType = { error: 'error', warning: 'warning', info: 'info' } as const
 const levelLabel = { error: '错误', warning: '警告', info: '建议' } as const
@@ -105,7 +121,7 @@ const levelLabel = { error: '错误', warning: '警告', info: '建议' } as con
       <h2>地图符号设计</h2>
       <p>五步向导：需求定义 → iconfont AI 素材 → Illustrator 精修 → 规范化校验 → 入符号库</p>
     </div>
-    <el-steps :active="step" align-center finish-status="success">
+    <el-steps :active="step" :align-center="!isMobile" :direction="isMobile ? 'vertical' : 'horizontal'" finish-status="success">
       <el-step v-for="(t, i) in STEPS" :key="i" :title="t" />
     </el-steps>
 
@@ -221,6 +237,9 @@ const levelLabel = { error: '错误', warning: '警告', info: '建议' } as con
           <span>符号库（{{ symbols.length }}）</span>
           <span>
             <el-switch v-model="darkPreview" active-text="深色底预览" class="mr" />
+            <el-upload accept=".json" :auto-upload="false" :show-file-list="false" :on-change="onImportFile" class="lib-upload">
+              <el-button size="small">导入 JSON</el-button>
+            </el-upload>
             <el-button size="small" :disabled="!symbols.length" @click="downloadJson">导出 JSON</el-button>
           </span>
         </div>
@@ -311,6 +330,10 @@ const levelLabel = { error: '错误', warning: '警告', info: '建议' } as con
   justify-content: space-between;
   align-items: center;
 }
+.lib-upload {
+  display: inline-block;
+  margin-right: 8px;
+}
 .symbol-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -346,5 +369,20 @@ const levelLabel = { error: '错误', warning: '警告', info: '建议' } as con
   display: flex;
   gap: 4px;
   justify-content: center;
+}
+
+/* 移动端（spec/04 §9）：入库预览上下排、按钮换行 */
+@media (max-width: 768px) {
+  .final-row {
+    flex-direction: column;
+  }
+  .footer {
+    flex-wrap: wrap;
+  }
+  .lib-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 </style>

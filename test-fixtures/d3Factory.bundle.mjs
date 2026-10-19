@@ -2036,12 +2036,16 @@ function createProjection(info, extent, width, height) {
     case "transverse-mercator":
       proj = transverseMercator_default();
       break;
-    case "lambert-conformal-conic":
-      proj = conicConformal_default().parallels(p.standardParallels ?? [30, 60]);
+    case "lambert-conformal-conic": {
+      const sp = p.standardParallels;
+      proj = conicConformal_default().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [30, 60]);
       break;
-    case "albers-equal-area-conic":
-      proj = conicEqualArea_default().parallels(p.standardParallels ?? [25, 47]);
+    }
+    case "albers-equal-area-conic": {
+      const sp = p.standardParallels;
+      proj = conicEqualArea_default().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [25, 47]);
       break;
+    }
     case "azimuthal-equidistant":
       proj = azimuthalEquidistant_default();
       break;
@@ -2104,8 +2108,20 @@ function buildPreviewLayers(info, extent, width, height) {
   }
   return { sphere, grat, extentD, tissot };
 }
+var PREVIEW_STYLE = {
+  sphere: { fill: "#eaf4ee", stroke: "#7fb894", "stroke-width": 1 },
+  grat: { fill: "none", stroke: "#b9d9c6", "stroke-width": 0.6 },
+  extent: { fill: "rgba(59, 162, 114, 0.12)", stroke: "#2e825b", "stroke-width": 1.2 },
+  tissot: { fill: "rgba(230, 126, 34, 0.28)", stroke: "#e67e22", "stroke-width": 0.8 }
+};
+function buildStandaloneSvg(inner, width, height) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width * 2}" height="${height * 2}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="#f3faf6"/>` + inner + `</svg>`;
+}
 export {
+  PREVIEW_STYLE,
   buildPreviewLayers,
+  buildStandaloneSvg,
   createProjection,
   extentPolygon,
   isWorldExtent

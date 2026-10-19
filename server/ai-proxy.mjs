@@ -18,12 +18,15 @@ const PORT = Number(process.env.PORT ?? 8787)
 const BASE_URL = process.env.LLM_BASE_URL ?? 'https://api.openai.com/v1'
 const API_KEY = process.env.LLM_API_KEY
 const MODEL = process.env.LLM_MODEL ?? 'gpt-4o-mini'
+// 允许的前端来源：本地开发默认 vite；线上在 .env 配 ALLOW_ORIGIN=https://<你的Pages域名>
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN ?? 'http://localhost:5173'
 
 const server = createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173')
+  res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN)
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.writeHead(204).end()
-  if (req.method !== 'POST' || req.url !== '/api/ai/recommend') {
+  // 宽松匹配路径后缀：本地为 /api/ai/recommend，云网关可能带 /release 等前缀
+  if (req.method !== 'POST' || !(req.url ?? '').endsWith('/ai/recommend')) {
     return res.writeHead(404).end('not found')
   }
   if (!API_KEY) {
@@ -38,12 +41,13 @@ const server = createServer(async (req, res) => {
   const { messages } = JSON.parse(body)
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 15_000)
+  // 慢模型/中转站首字可能 60s+，超时放宽到 115s（spec/01 NFR-1）
+  const timer = setTimeout(() => controller.abort(), Number(process.env.UPSTREAM_TIMEOUT ?? 115_000))
   try {
     const upstream = await fetch(`${BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.2 }),
+      body: JSON.stringify({ model: MODEL, messages }),
       signal: controller.signal,
     })
     const result = await upstream.json()

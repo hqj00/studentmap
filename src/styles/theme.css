@@ -78,3 +78,40 @@ body {
   border-color: var(--el-color-primary);
   background: #eef7f1;
 }
+
+/* —— 移动端适配（≤768px，spec/04 §9） —— */
+@media (max-width: 768px) {
+  /* 表单标签顶对齐，给输入控件让出横向空间 */
+  .el-form-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .el-form-item__label {
+    width: auto !important;
+    height: auto;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    padding: 0 0 4px;
+  }
+  .el-form-item__content {
+    margin-left: 0 !important;
+  }
+  /* 收紧留白 */
+  .el-main {
+    padding: 12px;
+  }
+  .el-card__body {
+    padding: 14px;
+  }
+  .page-hero h2 {
+    font-size: 18px;
+  }
+  .page-hero p {
+    font-size: 13px;
+  }
+  /* 复选框长文本允许换行，避免顶出卡片 */
+  .el-checkbox__label {
+    white-space: normal;
+    word-break: break-all;
+  }
+}

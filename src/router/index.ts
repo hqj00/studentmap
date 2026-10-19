@@ -11,9 +11,14 @@ export const router = createRouter({
       meta: { title: '地图投影推荐' },
     },
     {
+      path: '/smart-symbols',
+      component: () => import('@/views/SmartSymbolDesignView.vue'),
+      meta: { title: '智能符号设计' },
+    },
+    {
       path: '/symbols',
       component: () => import('@/views/SymbolDesignView.vue'),
-      meta: { title: '地图符号设计' },
+      meta: { title: '符号设计向导' },
     },
   ],
 })

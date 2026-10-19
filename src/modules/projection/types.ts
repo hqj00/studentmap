@@ -50,6 +50,8 @@ export interface ProjectionInfo {
   cons: string[]
   /** EPSG 对应提示；无直接对应时省略，由 exporters 统一兜底文案 */
   epsgHint?: string
+  /** 参考影像图（Wikimedia Commons 自由许可，spec/02 §10）；无合适影像时省略 */
+  refImage?: { url: string; credit: string }
 }
 
 export interface Recommendation {

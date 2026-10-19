@@ -22,10 +22,11 @@ const FORBIDDEN_TAGS = ['script', 'foreignObject']
 export function checkAndNormalizeSvg(svgText: string): SvgCheckResult {
   const issues: SvgIssue[] = []
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml')
-  if (doc.querySelector('parsererror')) {
+  const root = doc.documentElement
+  // root 为 null = 内容连元素都没有（如纯文本）；parsererror = 浏览器解析出错的标记节点
+  if (!root || doc.querySelector('parsererror')) {
     return { ok: false, issues: [{ level: 'error', message: 'SVG 无法解析，请确认文件完整且为矢量 SVG（非位图改名）' }] }
   }
-  const root = doc.documentElement
   if (root.tagName.toLowerCase() !== 'svg') {
     return { ok: false, issues: [{ level: 'error', message: '根元素不是 <svg>' }] }
   }

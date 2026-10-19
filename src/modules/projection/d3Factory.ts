@@ -57,12 +57,16 @@ export function createProjection(
     case 'transverse-mercator':
       proj = geoTransverseMercator()
       break
-    case 'lambert-conformal-conic':
-      proj = geoConicConformal().parallels(p.standardParallels ?? [30, 60])
+    case 'lambert-conformal-conic': {
+      const sp = p.standardParallels
+      proj = geoConicConformal().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [30, 60])
       break
-    case 'albers-equal-area-conic':
-      proj = geoConicEqualArea().parallels(p.standardParallels ?? [25, 47])
+    }
+    case 'albers-equal-area-conic': {
+      const sp = p.standardParallels
+      proj = geoConicEqualArea().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [25, 47])
       break
+    }
     case 'azimuthal-equidistant':
       proj = geoAzimuthalEquidistant()
       break
@@ -150,4 +154,23 @@ export function buildPreviewLayers(
     }
   }
   return { sphere, grat, extentD, tissot }
+}
+
+/** 预览图层样式：组件内联绑定使用，导出的独立 SVG 因此样式自包含（spec/02 §6 预览导出） */
+export const PREVIEW_STYLE = {
+  sphere: { fill: '#eaf4ee', stroke: '#7fb894', 'stroke-width': 1 },
+  grat: { fill: 'none', stroke: '#b9d9c6', 'stroke-width': 0.6 },
+  extent: { fill: 'rgba(59, 162, 114, 0.12)', stroke: '#2e825b', 'stroke-width': 1.2 },
+  tissot: { fill: 'rgba(230, 126, 34, 0.28)', stroke: '#e67e22', 'stroke-width': 0.8 },
+} as const
+
+/** 把渲染中的 SVG 内容包装成可独立打开的 SVG 文件（2 倍尺寸写出，供高清使用） */
+export function buildStandaloneSvg(inner: string, width: number, height: number): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 2}" height="${height * 2}" viewBox="0 0 ${width} ${height}">` +
+    `<rect width="${width}" height="${height}" fill="#f3faf6"/>` +
+    inner +
+    `</svg>`
+  )
 }

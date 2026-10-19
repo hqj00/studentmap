@@ -1,7 +1,7 @@
 /** 符号模块类型定义 — 对应 spec/03 §4 */
 
 export type SymbolCategory = 'point' | 'line' | 'area'
-export type SymbolSource = 'iconfont-ai' | 'illustrator' | 'other'
+export type SymbolSource = 'iconfont-ai' | 'iconify' | 'illustrator' | 'other'
 
 export interface SymbolRecord {
   id: string
@@ -22,6 +22,7 @@ export const CATEGORY_LABELS: Record<SymbolCategory, string> = {
 
 export const SOURCE_LABELS: Record<SymbolSource, string> = {
   'iconfont-ai': 'iconfont AI 素材',
+  iconify: 'Iconify 开放图标',
   illustrator: 'Illustrator 原创',
   other: '其他',
 }

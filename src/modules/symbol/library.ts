@@ -1,5 +1,6 @@
 import { ref, watch } from 'vue'
 import type { SymbolRecord } from './types'
+import { mergeLibraryJson, type ImportResult } from './transfer'
 
 const STORAGE_KEY = 'studentmap.symbols.v1'
 
@@ -50,5 +51,12 @@ export function useSymbolLibrary() {
     return JSON.stringify(symbols.value, null, 2)
   }
 
-  return { symbols, add, remove, exportJson }
+  /** 导入他人导出的 JSON 并合并入库（spec/03 §7 用例6） */
+  function importJson(text: string): ImportResult {
+    const result = mergeLibraryJson(text, symbols.value)
+    if (result.ok) symbols.value = result.records
+    return result
+  }
+
+  return { symbols, add, remove, exportJson, importJson }
 }

@@ -4,7 +4,7 @@ flowchart LR
     UI["界面层<br/>投影推荐视图 · 符号设计视图"]
     PM["投影模块 projection/<br/>规则引擎 · AI 客户端 · 知识库"]
     SM["符号模块 symbol/<br/>规范化校验 · 符号库"]
-    PV["投影预览（规划）<br/>d3-geo + Tissot"]
+    PV["投影预览<br/>d3-geo + Tissot"]
     UI --> PM
     UI --> SM
     PM --> PV
@@ -16,15 +16,17 @@ flowchart LR
 
   LLM[("通用大模型 API<br/>GPT / GLM / 通义千问")]
   LS[("本地持久化<br/>localStorage / JSON 导出")]
+  IC[("Iconify 公共 API<br/>F3 智能符号搜索")]
 
   subgraph External["外部工具（学生本地离线操作）"]
-    IF["iconfont 网站<br/>AI 生成基础符号 SVG"]
+    IF["iconfont 网站<br/>AI 生成基础符号 / 搜索页"]
     AI["Adobe Illustrator<br/>专业化设计与导出"]
   end
 
   PM -->|"HTTPS /api/ai/recommend"| AP
   AP -->|"Bearer Key"| LLM
   SM --> LS
+  SM -->|"HTTPS（免密钥，CORS 开放）"| IC
   UI -. "步骤引导 + 描述词" .-> IF
   IF -. "下载 SVG" .-> AI
   AI -. "导出规范 SVG" .-> SM

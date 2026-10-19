@@ -100,6 +100,7 @@ const dragRect = computed(() => {
   <svg
     class="picker"
     :viewBox="`0 0 ${W} ${H}`"
+    style="aspect-ratio: 2 / 1"
     @mousedown="down"
     @mousemove="move"
     @mouseup="up"
