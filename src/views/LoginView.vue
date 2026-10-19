@@ -37,10 +37,10 @@ async function submit() {
     ElMessage.warning('请输入账号和密码')
     return
   }
-  const username = form.username.trim()
+  const username = form.username.trim().toLowerCase()
   if (mode.value === 'register' && username) {
-    if (!/^[\w一-龥-]{2,20}$/.test(username) || /^\d+$/.test(username)) {
-      ElMessage.warning('用户名需为 2~20 位字母/数字/中文，且不能是纯数字')
+    if (!/^[a-z][0-9a-z_-]{5,24}$/.test(username)) {
+      ElMessage.warning('用户名需以字母开头，6~25 位小写字母/数字/下划线/连字符（不支持中文）')
       return
     }
   }
@@ -104,7 +104,7 @@ async function onLogout() {
         </el-form-item>
 
         <el-form-item v-if="mode === 'register'" label="用户名">
-          <el-input v-model="form.username" placeholder="选填：设置后登录时邮箱/用户名都行（不能纯数字）" />
+          <el-input v-model="form.username" placeholder="选填：字母开头 6~25 位小写字母/数字/_/-，如 hanqingjing" />
         </el-form-item>
 
         <el-form-item v-if="mode === 'register'" label="验证码">

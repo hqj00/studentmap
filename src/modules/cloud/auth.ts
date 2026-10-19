@@ -83,6 +83,8 @@ export function useAuth() {
    * username 选填——填了之后登录时邮箱/用户名都指向同一账号（spec/06 §2 ⑥） */
   async function register(email: string, password: string, emailCode?: string, username?: string) {
     if (!emailCode) throw new Error('请输入邮箱验证码')
+    // 服务端 username 强制 ^[a-z][0-9a-z_-]{5,24}$（spec/06 §2 ③ 实测）：统一小写后传入
+    const uname = username?.trim().toLowerCase() || undefined
     const auth = await cbAuth()
     const v = (await callAuth(
       auth.verify({ verification_id: pendingVerificationId, verification_code: emailCode }),
@@ -96,8 +98,8 @@ export function useAuth() {
         verification_code: emailCode,
         verification_token: vToken,
         password,
-        name: username || email.split('@')[0],
-        ...(username ? { username } : {}),
+        name: uname ?? email.split('@')[0],
+        ...(uname ? { username: uname } : {}),
       }),
       '注册失败',
     )
