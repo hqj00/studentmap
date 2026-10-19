@@ -20,7 +20,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # VITE_* 为前端构建期公开变量（本就会打进 JS 包），从仓库 Variables 注入；不设则为本地模式
       - run: npm run build
+        env:
+          VITE_TCB_ENV: ${{ vars.VITE_TCB_ENV }}
+          VITE_AI_BASE_URL: ${{ vars.VITE_AI_BASE_URL }}
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
