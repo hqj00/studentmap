@@ -2,10 +2,14 @@
 import { ref } from 'vue'
 
 /**
- * 可缩放地图容器（spec/07 §2.5）：滚轮以指针为中心缩放、按住拖拽平移、右上角 +/−/重置。
+ * 可缩放地图容器（spec/07 §2.5）：右上角 ＋/−/重置按钮始终可用；
+ * movable=false（默认）时图面固定，拖拽与滚轮不生效；movable=true 时才允许拖拽平移与滚轮缩放。
  * 缩放平移只是 SVG 视图变换（transform），插槽内容（投影路径）不重新计算。
  */
-const props = defineProps<{ width: number; height: number; label?: string }>()
+const props = withDefaults(
+  defineProps<{ width: number; height: number; label?: string; movable?: boolean }>(),
+  { movable: false },
+)
 
 const MIN_SCALE = 1
 const MAX_SCALE = 16
@@ -34,6 +38,8 @@ function localPoint(ev: WheelEvent | PointerEvent): [number, number] {
 }
 
 function onWheel(ev: WheelEvent) {
+  if (!props.movable) return // 固定模式：滚轮不缩放，页面正常滚动
+  ev.preventDefault()
   const [mx, my] = localPoint(ev)
   zoomBy(ev.deltaY < 0 ? 1.2 : 1 / 1.2, mx, my)
 }
@@ -41,6 +47,7 @@ function onWheel(ev: WheelEvent) {
 const dragging = ref<{ x: number; y: number } | null>(null)
 
 function onPointerDown(ev: PointerEvent) {
+  if (!props.movable) return // 固定模式：不可拖拽
   ;(ev.currentTarget as SVGSVGElement).setPointerCapture(ev.pointerId)
   dragging.value = { x: ev.clientX, y: ev.clientY }
 }
@@ -76,12 +83,12 @@ function reset() {
   <div class="zm-wrap">
     <svg
       class="zm-svg"
-      :class="{ panning: dragging }"
+      :class="{ panning: dragging, movable: props.movable }"
       :viewBox="`0 0 ${width} ${height}`"
       :style="{ aspectRatio: `${width} / ${height}` }"
       role="img"
       :aria-label="label ?? '可缩放地图'"
-      @wheel.prevent="onWheel"
+      @wheel="onWheel"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
@@ -110,9 +117,12 @@ function reset() {
   border-radius: 6px;
   border: 1px solid #e0efe5;
   background: #fbfcfa;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   user-select: none;
+}
+.zm-svg.movable {
+  cursor: grab;
 }
 .zm-svg.panning {
   cursor: grabbing;

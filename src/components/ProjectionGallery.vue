@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { PROJECTION_KB } from '@/modules/projection/presets'
 import { PROPERTY_LABELS, CATEGORY_LABELS } from '@/modules/projection/types'
 import type { DistortionProperty, ProjectionCategory, ProjectionInfo, RegionExtent } from '@/modules/projection/types'
-import { buildPreviewLayers, PREVIEW_STYLE } from '@/modules/projection/d3Factory'
+import { buildPreviewLayers, PREVIEW_STYLE, worldDisplayNote } from '@/modules/projection/d3Factory'
 import { suitabilityAt } from '@/modules/projection/ruleEngine'
 import { effectiveParams, gaussKrugerCentral } from '@/modules/projection/params'
 import ZoomableMap from '@/components/ZoomableMap.vue'
@@ -29,6 +29,8 @@ const propertyOptions = [
 
 /** 按坐标查看（spec/07 §2.4）：输入中心经纬度，缩略图定向到该点并给出规则结论 */
 const coord = reactive({ enabled: false, lon: 105, lat: 35 })
+/** 移动开关（spec/07 §2.5）：默认固定，仅按钮缩放；开启后才允许拖拽/滚轮 */
+const allowMove = ref(false)
 const coordValid = computed(
   () =>
     coord.enabled &&
@@ -107,6 +109,7 @@ const cards = computed(() => {
       <el-option v-for="o in propertyOptions" :key="o.value" :value="o.value" :label="o.label" />
     </el-select>
     <el-checkbox v-model="coord.enabled" class="ctl-coord">按坐标查看</el-checkbox>
+    <el-checkbox v-model="allowMove" class="ctl-move">允许拖动</el-checkbox>
     <template v-if="coord.enabled">
       <el-input-number v-model="coord.lon" :min="-180" :max="180" :step="1" placeholder="经度" class="ctl-num" />
       <el-input-number v-model="coord.lat" :min="-90" :max="90" :step="1" placeholder="纬度" class="ctl-num" />
@@ -131,7 +134,8 @@ const cards = computed(() => {
       <ZoomableMap
         :width="W"
         :height="H"
-        :label="`${c.info.zhName}${coordValid ? '（按坐标定向，可缩放拖拽）' : '世界全图（可缩放拖拽）'}`"
+        :movable="allowMove"
+        :label="`${c.info.zhName}${coordValid ? '（按坐标定向，可缩放）' : `${worldDisplayNote(c.info) ?? '世界全图'}（可缩放）`}`"
       >
         <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
         <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
@@ -166,7 +170,8 @@ const cards = computed(() => {
 .ctl-select {
   width: 150px;
 }
-.ctl-coord {
+.ctl-coord,
+.ctl-move {
   margin-left: 4px;
 }
 .ctl-num {
