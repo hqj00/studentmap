@@ -225,7 +225,7 @@ async function copyText(text: string, label: string) {
           </p>
 
           <ProjectionPreview :info="rec.projection" :extent="lastExtent" />
-          <p class="legend">灰网：经纬网 · 橙圈：Tissot 变形椭圆（越扁/越大＝变形越大） · 绿框：制图范围</p>
+          <p class="legend">浅绿块：陆地轮廓 · 虚线：经纬网 · 橙圈：Tissot 变形椭圆（越扁/越大＝变形越大） · 绿框：制图范围</p>
 
           <!-- 参考影像（spec/02 §10）：与本应用生成的示意图上下结构，加载失败整块隐藏 -->
           <div v-if="rec.projection.refImage && !refImageFailed.has(rec.projection.id)" class="ref-image">

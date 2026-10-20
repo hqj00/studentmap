@@ -18,8 +18,17 @@ import {
   type GeoProjection,
 } from 'd3-geo'
 import { geoCylindricalEqualArea, geoMollweide, geoPolyconic, geoRobinson, geoSinusoidal, geoWinkel3 } from 'd3-geo-projection'
+import { feature } from 'topojson-client'
+import type { GeometryObject, Topology } from 'topojson-specification'
+import landTopo from '@/assets/land-110m.json'
 import type { ProjectionInfo, RegionExtent } from './types'
 import { effectiveParams } from './params'
+
+/** 世界陆地轮廓（world-atlas land-110m，内置分发、离线可用；spec/07 §2.5） */
+const LAND = feature(
+  landTopo as unknown as Topology,
+  (landTopo as unknown as Topology).objects.land as GeometryObject,
+) as unknown as GeoPermissibleObjects
 
 /** 制图范围的 GeoJSON 外框（预览绿框 / fitExtent 目标）。环必须顺时针（d3 球面多边形约定），否则会被当作补集 */
 export function extentPolygon(e: RegionExtent): GeoPermissibleObjects {
@@ -141,12 +150,16 @@ export function createProjection(
   return proj
 }
 
-/** 预览图层路径（spec/02 §6）：组件与离线验收脚本共用 */
+/** 预览图层路径（spec/02 §6 + spec/07 §2.5）：组件与离线验收脚本共用 */
 export interface PreviewLayers {
   sphere: string
+  /** 陆地轮廓（world-atlas land-110m） */
+  land: string
   grat: string
   extentD: string
   tissot: string[]
+  /** 坐标标记点（投影后像素坐标；落在裁剪区外时为 null，不绘制） */
+  markerPt: [number, number] | null
 }
 
 export function buildPreviewLayers(
@@ -154,13 +167,16 @@ export function buildPreviewLayers(
   extent: RegionExtent,
   width: number,
   height: number,
+  marker?: [number, number],
 ): PreviewLayers {
   const proj = createProjection(info, extent, width, height)
   const path = geoPath(proj)
 
   const sphere = path({ type: 'Sphere' }) ?? ''
+  const land = path(LAND) ?? ''
   const grat = path(geoGraticule()()) ?? ''
   const extentD = isWorldExtent(extent) ? '' : (path(extentPolygon(extent)) ?? '')
+  const markerPt = marker ? (proj(marker) ?? null) : null
 
   // Tissot：区域内 4×3 布点的等半径小圆，投影后的形变直观反映面积/角度变形
   const lonSpan = extent.maxLon - extent.minLon
@@ -176,13 +192,14 @@ export function buildPreviewLayers(
       if (d) tissot.push(d)
     }
   }
-  return { sphere, grat, extentD, tissot }
+  return { sphere, land, grat, extentD, tissot, markerPt }
 }
 
-/** 预览图层样式：组件内联绑定使用，导出的独立 SVG 因此样式自包含（spec/02 §6 预览导出） */
+/** 预览图层样式（spec/07 §2.5 陆地填充教学风格）：组件内联绑定使用，导出的独立 SVG 因此样式自包含 */
 export const PREVIEW_STYLE = {
-  sphere: { fill: '#eaf4ee', stroke: '#7fb894', 'stroke-width': 1 },
-  grat: { fill: 'none', stroke: '#b9d9c6', 'stroke-width': 0.6 },
+  sphere: { fill: '#fbfcfa', stroke: '#c9d9c9', 'stroke-width': 1 },
+  land: { fill: '#e9f2e3', stroke: '#b9cfb2', 'stroke-width': 0.6 },
+  grat: { fill: 'none', stroke: '#c3d8c4', 'stroke-width': 0.5, 'stroke-dasharray': '2 3' },
   extent: { fill: 'rgba(59, 162, 114, 0.12)', stroke: '#2e825b', 'stroke-width': 1.2 },
   tissot: { fill: 'rgba(230, 126, 34, 0.28)', stroke: '#e67e22', 'stroke-width': 0.8 },
 } as const
@@ -192,7 +209,7 @@ export function buildStandaloneSvg(inner: string, width: number, height: number)
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 2}" height="${height * 2}" viewBox="0 0 ${width} ${height}">` +
-    `<rect width="${width}" height="${height}" fill="#f3faf6"/>` +
+    `<rect width="${width}" height="${height}" fill="#fbfcfa"/>` +
     inner +
     `</svg>`
   )

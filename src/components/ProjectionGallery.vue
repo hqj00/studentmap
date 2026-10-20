@@ -6,6 +6,7 @@ import type { DistortionProperty, ProjectionCategory, ProjectionInfo, RegionExte
 import { buildPreviewLayers, PREVIEW_STYLE } from '@/modules/projection/d3Factory'
 import { suitabilityAt } from '@/modules/projection/ruleEngine'
 import { effectiveParams, gaussKrugerCentral } from '@/modules/projection/params'
+import ZoomableMap from '@/components/ZoomableMap.vue'
 
 // 默认总览：世界四至渲染经纬网缩略图（spec/07 §2.3）
 const WORLD: RegionExtent = { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }
@@ -57,24 +58,29 @@ const cards = computed(() => {
       (filter.category === 'all' || info.category === filter.category) &&
       (filter.property === 'all' || info.property === filter.property),
   ).map((info) => {
-    const layers = buildPreviewLayers(info, extent, W, H)
+    // 坐标模式下传入中心点，图面上以圆点标出（spec/07 §2.5）
+    const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined)
     const card: {
       info: ProjectionInfo
       no: number
       sphere: string
+      land: string
       grat: string
       extentD: string
       tissot: string[]
+      markerPt: [number, number] | null
       rule?: { hit: boolean; text: string }
       paramsText?: string
     } = {
       info,
       no: PROJECTION_KB.indexOf(info) + 1,
       sphere: layers.sphere,
+      land: layers.land,
       grat: layers.grat,
       // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
       extentD: coordValid.value ? layers.extentD : '',
       tissot: coordValid.value ? layers.tissot : [],
+      markerPt: layers.markerPt,
     }
     if (coordValid.value) {
       card.rule = suitabilityAt(info, coord.lat)
@@ -122,17 +128,22 @@ const cards = computed(() => {
         <el-tag size="small">{{ CATEGORY_LABELS[c.info.category] }}</el-tag>
         <el-tag size="small" type="warning">{{ PROPERTY_LABELS[c.info.property] }}</el-tag>
       </p>
-      <svg
-        class="thumb"
-        :viewBox="`0 0 ${W} ${H}`"
-        role="img"
-        :aria-label="`${c.info.zhName}${coordValid ? '（按坐标定向）' : '世界全图经纬网'}`"
+      <ZoomableMap
+        :width="W"
+        :height="H"
+        :label="`${c.info.zhName}${coordValid ? '（按坐标定向，可缩放拖拽）' : '世界全图（可缩放拖拽）'}`"
       >
         <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
+        <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
         <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
         <path v-if="c.extentD" :d="c.extentD" v-bind="PREVIEW_STYLE.extent" />
         <path v-for="(d, i) in c.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
-      </svg>
+        <!-- 坐标标记点：光晕 + 实心点（spec/07 §2.5） -->
+        <g v-if="c.markerPt">
+          <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="7" fill="rgba(230, 126, 34, 0.25)" />
+          <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="3" fill="#e67e22" stroke="#fff" stroke-width="1.2" />
+        </g>
+      </ZoomableMap>
       <template v-if="c.rule">
         <p class="item-rule" :class="{ miss: !c.rule.hit }">
           <b>{{ c.rule.hit ? '✓ 规则命中：' : '✗ 规则未命中：' }}</b>{{ c.rule.text }}
@@ -216,14 +227,6 @@ const cards = computed(() => {
   margin: 8px 0 6px;
   display: flex;
   gap: 6px;
-}
-.thumb {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 6px;
-  border: 1px solid #e0efe5;
-  background: #f3faf6;
 }
 .item-rule {
   margin: 8px 0 0;

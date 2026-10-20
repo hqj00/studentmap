@@ -65,6 +65,7 @@ async function downloadPng() {
       aria-label="投影预览"
     >
       <path :d="layers.sphere" v-bind="PREVIEW_STYLE.sphere" />
+      <path :d="layers.land" v-bind="PREVIEW_STYLE.land" />
       <path :d="layers.grat" v-bind="PREVIEW_STYLE.grat" />
       <path v-if="layers.extentD" :d="layers.extentD" v-bind="PREVIEW_STYLE.extent" />
       <path v-for="(d, i) in layers.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
@@ -86,7 +87,7 @@ async function downloadPng() {
   display: block;
   border-radius: 8px;
   border: 1px solid #e0efe5;
-  background: #f3faf6;
+  background: #fbfcfa;
 }
 .preview-actions {
   position: absolute;
