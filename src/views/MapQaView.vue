@@ -2,6 +2,7 @@
 import { nextTick, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { answerLocally, askByAI, type QaMessage } from '@/modules/qa/qaClient'
+import { aiAvailable } from '@/modules/projection/aiClient'
 
 interface ChatItem extends QaMessage {
   /** 回答来源（spec/07 §3.1）：AI 助教 / 离线知识库 */
@@ -37,6 +38,11 @@ async function send(text?: string) {
   loading.value = true
   await scrollToBottom()
   try {
+    if (!aiAvailable) {
+      // 未配置 AI 代理：直接走离线知识库，不发注定失败的请求
+      messages.value.push({ role: 'assistant', content: answerLocally(question), source: 'local' })
+      return
+    }
     // 只发用户/助手对话历史，不带 source 等本地字段
     const history: QaMessage[] = messages.value.map(({ role, content }) => ({ role, content }))
     const answer = await askByAI(history)
@@ -66,7 +72,7 @@ function clear() {
   <div class="page">
     <div class="page-hero">
       <h2>地图学问答</h2>
-      <p>AI 助教回答地图学问题（投影、坐标系、比例尺、符号、制图综合）；AI 不可用时自动切换站内离线知识库</p>
+      <p>{{ aiAvailable ? 'AI 助教回答地图学问题（投影、坐标系、比例尺、符号、制图综合）；AI 不可用时自动切换站内离线知识库' : '站内离线知识库回答常用地图学问题（投影、坐标系、比例尺、符号、制图综合）' }}</p>
     </div>
 
     <el-card shadow="never" class="chat-card">

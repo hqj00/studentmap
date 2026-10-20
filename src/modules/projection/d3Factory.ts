@@ -54,6 +54,116 @@ export function isWorldExtent(e: RegionExtent): boolean {
   return e.maxLon - e.minLon >= 330 && e.maxLat - e.minLat >= 100
 }
 
+/**
+ * 世界视图下，部分投影无法展示整个球面（圆锥两极发散成无穷扇形、墨卡托极点映射到无穷远、
+ * 横轴墨卡托在离中央经线 90° 处奇异）——退化为各自的"教学展示带"（spec/07 §2.3）。
+ * 返回 null 表示可用完整球面。
+ */
+export interface WorldDisplay {
+  extent: RegionExtent
+  centralMeridian: number
+  standardParallels?: [number, number]
+}
+
+export function worldDisplayConfig(info: ProjectionInfo): WorldDisplay | null {
+  const midLat: RegionExtent = { minLon: 40, minLat: 5, maxLon: 150, maxLat: 65 }
+  if (info.category === 'conic') {
+    // 圆锥投影的教科书示意：中纬东西延展区域（欧亚），标称标准纬线
+    return {
+      extent: midLat,
+      centralMeridian: 95,
+      standardParallels: info.id === 'albers-equal-area-conic' ? [25, 47] : [30, 60],
+    }
+  }
+  if (info.id === 'mercator') {
+    return { extent: { minLon: -180, minLat: -85, maxLon: 180, maxLat: 85 }, centralMeridian: 0 }
+  }
+  if (info.id === 'transverse-mercator') {
+    // 高斯-克吕格按单个 6° 带无法构图，展示带取中纬区域以呈现经线收敛
+    return { extent: midLat, centralMeridian: 95 }
+  }
+  return null
+}
+
+/** 世界视图展示说明（卡片副标题用；null 表示标准世界全图） */
+export function worldDisplayNote(info: ProjectionInfo): string | null {
+  if (info.category === 'conic' || info.id === 'transverse-mercator') return '中纬带示意'
+  if (info.id === 'mercator') return '世界全图（±85° 内）'
+  return null
+}
+
+/** Sutherland–Hodgman：把环裁剪到经纬度矩形（平面坐标），用于展示带内的陆地轮廓 */
+function clipRingToRect(ringPts: [number, number][], e: RegionExtent): [number, number][] {
+  let pts = ringPts
+  const cut = (
+    input: [number, number][],
+    inside: (p: [number, number]) => boolean,
+    intersect: (a: [number, number], b: [number, number]) => [number, number],
+  ) => {
+    const out: [number, number][] = []
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i]
+      const prev = input[(i + input.length - 1) % input.length]
+      const curIn = inside(cur)
+      const prevIn = inside(prev)
+      if (curIn) {
+        if (!prevIn) out.push(intersect(prev, cur))
+        out.push(cur)
+      } else if (prevIn) {
+        out.push(intersect(prev, cur))
+      }
+    }
+    return out
+  }
+  const ixLon = (a: [number, number], b: [number, number], lon: number): [number, number] => [
+    lon,
+    a[1] + ((b[1] - a[1]) * (lon - a[0])) / (b[0] - a[0]),
+  ]
+  const ixLat = (a: [number, number], b: [number, number], lat: number): [number, number] => [
+    a[0] + ((b[0] - a[0]) * (lat - a[1])) / (b[1] - a[1]),
+    lat,
+  ]
+  pts = cut(pts, (p) => p[0] >= e.minLon, (a, b) => ixLon(a, b, e.minLon))
+  pts = cut(pts, (p) => p[0] <= e.maxLon, (a, b) => ixLon(a, b, e.maxLon))
+  pts = cut(pts, (p) => p[1] >= e.minLat, (a, b) => ixLat(a, b, e.minLat))
+  pts = cut(pts, (p) => p[1] <= e.maxLat, (a, b) => ixLat(a, b, e.maxLat))
+  return pts
+}
+
+/** 陆地轮廓裁剪到展示带（避免扇形/奇异区内容溢出画幅） */
+function clipLandToExtent(land: GeoPermissibleObjects, e: RegionExtent): GeoPermissibleObjects {
+  // topojson feature() 对本数据的 objects.land（GeometryCollection）返回 FeatureCollection
+  type Geometry = { type: string; coordinates?: number[][][][] }
+  const input = land as unknown as {
+    type: string
+    geometry?: Geometry
+    coordinates?: number[][][][]
+    features?: { geometry: Geometry }[]
+  }
+  const geometries: Geometry[] = []
+  if (input.type === 'FeatureCollection') {
+    for (const f of input.features ?? []) geometries.push(f.geometry)
+  } else if (input.type === 'Feature') {
+    if (input.geometry) geometries.push(input.geometry)
+  } else {
+    geometries.push(input as Geometry)
+  }
+  const out: number[][][][] = []
+  for (const g of geometries) {
+    const polys: number[][][][] =
+      g.type === 'Polygon'
+        ? [g.coordinates as unknown as number[][][]]
+        : g.type === 'MultiPolygon'
+          ? (g.coordinates as unknown as number[][][][])
+          : []
+    for (const polyRings of polys) {
+      const rings = polyRings.map((r) => clipRingToRect(r as [number, number][], e)).filter((r) => r.length >= 4)
+      if (rings.length) out.push(rings)
+    }
+  }
+  return { type: 'MultiPolygon', coordinates: out } as unknown as GeoPermissibleObjects
+}
+
 /** 知识库 id → 配置好参数与画幅的 d3 投影实例（spec/02 §6） */
 export function createProjection(
   info: ProjectionInfo,
@@ -62,6 +172,11 @@ export function createProjection(
   height: number,
 ): GeoProjection {
   const p = effectiveParams(info, extent)
+  // 世界视图：不能展示全球的投影改用教学展示带与其标称参数
+  const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null
+  const cm = display ? display.centralMeridian : p.centralMeridian
+  const originLat = display ? 0 : p.originLat
+  const parallels = display?.standardParallels ?? p.standardParallels
   let proj: GeoProjection
   switch (info.id) {
     case 'mercator':
@@ -71,13 +186,11 @@ export function createProjection(
       proj = geoTransverseMercator()
       break
     case 'lambert-conformal-conic': {
-      const sp = p.standardParallels
-      proj = geoConicConformal().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [30, 60])
+      proj = geoConicConformal().parallels(parallels && parallels.length >= 2 ? [parallels[0], parallels[1]] : [30, 60])
       break
     }
     case 'albers-equal-area-conic': {
-      const sp = p.standardParallels
-      proj = geoConicEqualArea().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [25, 47])
+      proj = geoConicEqualArea().parallels(parallels && parallels.length >= 2 ? [parallels[0], parallels[1]] : [25, 47])
       break
     }
     case 'azimuthal-equidistant':
@@ -129,17 +242,20 @@ export function createProjection(
   // 定向：方位投影视点对准区域中心（极地 ±90°）；其余旋转到中央经线、平移到原点纬度。
   // 横轴墨卡托必须走 rotate（沿中央经线定向），用 center 平移会把奇异区拉进画幅
   if (info.category === 'azimuthal') {
-    proj.rotate([-p.centralMeridian, -p.originLat])
+    proj.rotate([-cm, -originLat])
   } else {
-    proj.rotate([-p.centralMeridian, 0]).center([0, p.originLat])
+    proj.rotate([-cm, 0]).center([0, originLat])
   }
 
-  // 圆锥投影无法展示全球（极点发散到无穷），世界全图退化为中低纬展示带
-  const target: GeoPermissibleObjects = isWorldExtent(extent)
-    ? info.category === 'conic'
-      ? extentPolygon({ minLon: -180, minLat: -60, maxLon: 180, maxLat: 80 })
-    : { type: 'Sphere' }
-    : extentPolygon(extent)
+  // 世界全图：能展示完整球面的用球面，不能的退化为教学展示带
+  const target: GeoPermissibleObjects = display
+    ? extentPolygon(display.extent)
+    : isWorldExtent(extent)
+      ? { type: 'Sphere' }
+      : extentPolygon(extent)
+
+  // 墨卡托自带默认 clipExtent（按默认 scale/translate 定义），不清除会把 fitExtent 的包围盒算错
+  proj.clipExtent(null)
   proj.fitExtent(
     [
       [6, 6],
@@ -147,6 +263,13 @@ export function createProjection(
     ],
     target,
   )
+  // 展示带裁剪：扇形、奇异区一律裁到画幅内，避免路径溢出到卡片外
+  if (display) {
+    proj.clipExtent([
+      [0, 0],
+      [width, height],
+    ])
+  }
   return proj
 }
 
@@ -172,9 +295,19 @@ export function buildPreviewLayers(
   const proj = createProjection(info, extent, width, height)
   const path = geoPath(proj)
 
-  const sphere = path({ type: 'Sphere' }) ?? ''
-  const land = path(LAND) ?? ''
-  const grat = path(geoGraticule()()) ?? ''
+  // 世界视图的展示带投影：底图、陆地、经纬网都裁到展示带内（完整球面的扇形/无穷区不出画）
+  const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null
+  const sphere = path(display ? extentPolygon(display.extent) : { type: 'Sphere' }) ?? ''
+  const land = path(display ? clipLandToExtent(LAND, display.extent) : LAND) ?? ''
+  const grat =
+    path(
+      display
+        ? geoGraticule().extent([
+            [display.extent.minLon, display.extent.minLat],
+            [display.extent.maxLon, display.extent.maxLat],
+          ])()
+        : geoGraticule()(),
+    ) ?? ''
   const extentD = isWorldExtent(extent) ? '' : (path(extentPolygon(extent)) ?? '')
   const markerPt = marker ? (proj(marker) ?? null) : null
 

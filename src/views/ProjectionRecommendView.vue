@@ -5,11 +5,12 @@ import type { MapPurpose, RecommendRequest, Recommendation, RegionExtent } from 
 import { PURPOSE_LABELS, PROPERTY_LABELS, CATEGORY_LABELS } from '@/modules/projection/types'
 import { REGION_PRESETS, extentText, resolveExtent } from '@/modules/projection/presets'
 import { recommendByRule } from '@/modules/projection/ruleEngine'
-import { recommendByAI } from '@/modules/projection/aiClient'
+import { recommendByAI, aiAvailable } from '@/modules/projection/aiClient'
 import { effectiveParams } from '@/modules/projection/params'
 import { buildProj4, buildWkt, epsgHint } from '@/modules/projection/exporters'
 import ProjectionPreview from '@/components/ProjectionPreview.vue'
 import ProjectionGallery from '@/components/ProjectionGallery.vue'
+import ProjectionLab from '@/components/ProjectionLab.vue'
 import ExtentMapPicker from '@/components/ExtentMapPicker.vue'
 import CoordConverter from '@/components/CoordConverter.vue'
 
@@ -20,7 +21,7 @@ const form = reactive({
   presetId: 'china',
   extent: { minLon: 73.5, minLat: 3.8, maxLon: 135.1, maxLat: 53.6 } as RegionExtent,
   purpose: 'statistic' as MapPurpose,
-  useAI: false,
+  useAI: aiAvailable,
 })
 
 const purposeOptions = Object.entries(PURPOSE_LABELS).map(([value, label]) => ({ value, label }))
@@ -135,7 +136,7 @@ async function copyText(text: string, label: string) {
   <div class="page">
     <div class="page-hero">
       <h2>地图投影智能推荐</h2>
-      <p>输入制图区域与地图用途，规则引擎 + 大模型给出含参数与理由的专业投影方案</p>
+      <p>{{ aiAvailable ? '输入制图区域与地图用途，规则引擎 + 大模型给出含参数与理由的专业投影方案' : '输入制图区域与地图用途，规则引擎给出含参数与理由的专业投影方案' }}</p>
     </div>
 
     <el-card shadow="never">
@@ -179,10 +180,10 @@ async function copyText(text: string, label: string) {
             <el-option v-for="o in purposeOptions" :key="o.value" :value="o.value" :label="o.label" />
           </el-select>
         </el-form-item>
-        <el-form-item label="大模型增强">
+        <el-form-item v-if="aiAvailable" label="大模型增强">
           <div class="ai-toggle">
             <el-checkbox v-model="form.useAI">使用大模型解释与排序</el-checkbox>
-            <p class="ai-hint">未勾选或 AI 异常时自动降级为规则引擎推荐；本地开发需先 npm run server</p>
+            <p class="ai-hint">未勾选或 AI 异常时自动降级为规则引擎推荐</p>
           </div>
         </el-form-item>
         <el-form-item>
@@ -191,6 +192,9 @@ async function copyText(text: string, label: string) {
         </el-form-item>
       </el-form>
     </el-card>
+
+    <!-- 投影实验室 + 教学助手（spec/08）：自然语言直接驱动 A/B 投影实验 -->
+    <ProjectionLab />
 
     <template v-if="results.length && lastExtent">
       <el-alert

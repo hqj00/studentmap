@@ -2237,8 +2237,86 @@ function extentPolygon(e) {
 function isWorldExtent(e) {
   return e.maxLon - e.minLon >= 330 && e.maxLat - e.minLat >= 100;
 }
+function worldDisplayConfig(info) {
+  const midLat = { minLon: 40, minLat: 5, maxLon: 150, maxLat: 65 };
+  if (info.category === "conic") {
+    return {
+      extent: midLat,
+      centralMeridian: 95,
+      standardParallels: info.id === "albers-equal-area-conic" ? [25, 47] : [30, 60]
+    };
+  }
+  if (info.id === "mercator") {
+    return { extent: { minLon: -180, minLat: -85, maxLon: 180, maxLat: 85 }, centralMeridian: 0 };
+  }
+  if (info.id === "transverse-mercator") {
+    return { extent: midLat, centralMeridian: 95 };
+  }
+  return null;
+}
+function worldDisplayNote(info) {
+  if (info.category === "conic" || info.id === "transverse-mercator") return "\u4E2D\u7EAC\u5E26\u793A\u610F";
+  if (info.id === "mercator") return "\u4E16\u754C\u5168\u56FE\uFF08\xB185\xB0 \u5185\uFF09";
+  return null;
+}
+function clipRingToRect(ringPts, e) {
+  let pts = ringPts;
+  const cut = (input, inside, intersect) => {
+    const out = [];
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i];
+      const prev = input[(i + input.length - 1) % input.length];
+      const curIn = inside(cur);
+      const prevIn = inside(prev);
+      if (curIn) {
+        if (!prevIn) out.push(intersect(prev, cur));
+        out.push(cur);
+      } else if (prevIn) {
+        out.push(intersect(prev, cur));
+      }
+    }
+    return out;
+  };
+  const ixLon = (a, b, lon) => [
+    lon,
+    a[1] + (b[1] - a[1]) * (lon - a[0]) / (b[0] - a[0])
+  ];
+  const ixLat = (a, b, lat) => [
+    a[0] + (b[0] - a[0]) * (lat - a[1]) / (b[1] - a[1]),
+    lat
+  ];
+  pts = cut(pts, (p) => p[0] >= e.minLon, (a, b) => ixLon(a, b, e.minLon));
+  pts = cut(pts, (p) => p[0] <= e.maxLon, (a, b) => ixLon(a, b, e.maxLon));
+  pts = cut(pts, (p) => p[1] >= e.minLat, (a, b) => ixLat(a, b, e.minLat));
+  pts = cut(pts, (p) => p[1] <= e.maxLat, (a, b) => ixLat(a, b, e.maxLat));
+  return pts;
+}
+function clipLandToExtent(land, e) {
+  const input = land;
+  const geometries = [];
+  if (input.type === "FeatureCollection") {
+    for (const f of input.features ?? []) geometries.push(f.geometry);
+  } else if (input.type === "Feature") {
+    if (input.geometry) geometries.push(input.geometry);
+  } else {
+    geometries.push(input);
+  }
+  const out = [];
+  for (const g of geometries) {
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+    for (const polyRings of polys) {
+      const rings = polyRings.map((r) => clipRingToRect(r, e)).filter((r) => r.length >= 4);
+      if (rings.length) out.push(rings);
+    }
+  }
+  return { type: "MultiPolygon", coordinates: out };
+}
 function createProjection(info, extent, width, height) {
   const p = effectiveParams(info, extent);
+  const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null;
+  const cm = display ? display.centralMeridian : p.centralMeridian;
+  const originLat = display ? 0 : p.originLat;
+  const parallels = display?.standardParallels ?? p.standardParallels;
   let proj;
   switch (info.id) {
     case "mercator":
@@ -2248,13 +2326,11 @@ function createProjection(info, extent, width, height) {
       proj = transverseMercator_default();
       break;
     case "lambert-conformal-conic": {
-      const sp = p.standardParallels;
-      proj = conicConformal_default().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [30, 60]);
+      proj = conicConformal_default().parallels(parallels && parallels.length >= 2 ? [parallels[0], parallels[1]] : [30, 60]);
       break;
     }
     case "albers-equal-area-conic": {
-      const sp = p.standardParallels;
-      proj = conicEqualArea_default().parallels(sp && sp.length >= 2 ? [sp[0], sp[1]] : [25, 47]);
+      proj = conicEqualArea_default().parallels(parallels && parallels.length >= 2 ? [parallels[0], parallels[1]] : [25, 47]);
       break;
     }
     case "azimuthal-equidistant":
@@ -2302,11 +2378,12 @@ function createProjection(info, extent, width, height) {
       break;
   }
   if (info.category === "azimuthal") {
-    proj.rotate([-p.centralMeridian, -p.originLat]);
+    proj.rotate([-cm, -originLat]);
   } else {
-    proj.rotate([-p.centralMeridian, 0]).center([0, p.originLat]);
+    proj.rotate([-cm, 0]).center([0, originLat]);
   }
-  const target = isWorldExtent(extent) ? info.category === "conic" ? extentPolygon({ minLon: -180, minLat: -60, maxLon: 180, maxLat: 80 }) : { type: "Sphere" } : extentPolygon(extent);
+  const target = display ? extentPolygon(display.extent) : isWorldExtent(extent) ? { type: "Sphere" } : extentPolygon(extent);
+  proj.clipExtent(null);
   proj.fitExtent(
     [
       [6, 6],
@@ -2314,14 +2391,26 @@ function createProjection(info, extent, width, height) {
     ],
     target
   );
+  if (display) {
+    proj.clipExtent([
+      [0, 0],
+      [width, height]
+    ]);
+  }
   return proj;
 }
 function buildPreviewLayers(info, extent, width, height, marker) {
   const proj = createProjection(info, extent, width, height);
   const path = path_default(proj);
-  const sphere = path({ type: "Sphere" }) ?? "";
-  const land = path(LAND) ?? "";
-  const grat = path(graticule()()) ?? "";
+  const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null;
+  const sphere = path(display ? extentPolygon(display.extent) : { type: "Sphere" }) ?? "";
+  const land = path(display ? clipLandToExtent(LAND, display.extent) : LAND) ?? "";
+  const grat = path(
+    display ? graticule().extent([
+      [display.extent.minLon, display.extent.minLat],
+      [display.extent.maxLon, display.extent.maxLat]
+    ])() : graticule()()
+  ) ?? "";
   const extentD = isWorldExtent(extent) ? "" : path(extentPolygon(extent)) ?? "";
   const markerPt = marker ? proj(marker) ?? null : null;
   const lonSpan = extent.maxLon - extent.minLon;
@@ -2356,5 +2445,7 @@ export {
   buildStandaloneSvg,
   createProjection,
   extentPolygon,
-  isWorldExtent
+  isWorldExtent,
+  worldDisplayConfig,
+  worldDisplayNote
 };

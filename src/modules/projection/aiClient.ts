@@ -8,6 +8,14 @@ const TIMEOUT_MS = 125_000
 /** AI 代理地址：开发期走 vite 代理（/api）；线上用 VITE_AI_BASE_URL 指向部署好的代理（spec/04 §5/§7） */
 const AI_BASE = (import.meta.env.VITE_AI_BASE_URL ?? '/api').replace(/\/+$/, '')
 
+/**
+ * AI 代理是否可用（spec/02 §10）：显式配置了 VITE_AI_BASE_URL，或本地开发环境（vite 代理 /api → npm run server）。
+ * 部署在纯静态托管（如 GitHub Pages）又未配置变量时不可用——界面应隐藏 AI 入口而不是报"大模型不可用"。
+ */
+export const aiAvailable =
+  !!import.meta.env.VITE_AI_BASE_URL ||
+  (typeof location !== 'undefined' && ['localhost', '127.0.0.1'].includes(location.hostname))
+
 interface AiRecommendationItem {
   id: string
   reason?: string
