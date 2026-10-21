@@ -24,6 +24,8 @@ import landTopo from '@/assets/land-110m.json'
 // 中国国界矢量（spec/09 §2.5）：阿里云 DataV GeoAtlas 标准国界数据，含台湾、港澳、
 // 南海诸岛与十段线；体量小，直接内置以保证离线可用（仅作教学示意）
 import chinaBoundaryData from '@/assets/china-boundary.json'
+// 省级行政边界（spec/09 §2.5）：DataV 同源 34 个省级行政区（含台湾省、港澳），仅描边使用
+import chinaProvincesData from '@/assets/china-provinces.json'
 import type { ProjectionInfo, RegionExtent } from './types'
 import { effectiveParams } from './params'
 
@@ -44,6 +46,9 @@ const CHINA_TEN_DASH = {
   type: 'FeatureCollection',
   features: [(chinaBoundaryData as { features: unknown[] }).features[1]],
 } as unknown as GeoPermissibleObjects
+
+/** 34 个省级行政区边界（仅描边，不填充） */
+const CHINA_PROVINCES = chinaProvincesData as unknown as GeoPermissibleObjects
 
 /** 制图范围的 GeoJSON 外框（预览绿框 / fitExtent 目标）。环必须顺时针（d3 球面多边形约定），否则会被当作补集 */
 export function extentPolygon(e: RegionExtent): GeoPermissibleObjects {
@@ -302,6 +307,8 @@ export interface PreviewLayers {
   chinaBoundary: string
   /** 南海诸岛十段线（spec/09 §2.5；仅 opts.chinaBoundary 时生成，否则为空串） */
   chinaTenDash: string
+  /** 省级行政边界（spec/09 §2.5；仅 opts.chinaBoundary 时生成，否则为空串） */
+  chinaProvinces: string
 }
 
 export interface PreviewOptions {
@@ -339,6 +346,7 @@ export function buildPreviewLayers(
   // 中国国界图层（spec/09 §2.5）：与陆地同一投影，clipExtent 下自动裁到画幅
   const chinaBoundary = opts?.chinaBoundary ? (path(CHINA_BOUNDARY) ?? '') : ''
   const chinaTenDash = opts?.chinaBoundary ? (path(CHINA_TEN_DASH) ?? '') : ''
+  const chinaProvinces = opts?.chinaBoundary ? (path(CHINA_PROVINCES) ?? '') : ''
   // 经纬网间隔（spec/09 §3.1）：区域图 10° 细网（中国全图惯例）；世界全图 30°（挂图惯例，缩略图下清晰）；
   // 方位类全球图 15°（极区/半球图的经纬圈更密，30° 只剩两三圈）；墨卡托等跨 360° 的展示带同样取 30°。
   // 判断依据是成图范围本身（isWorldExtent），而非是否裁剪——推荐方案预览不裁剪，中国范围也应是 10° 网
@@ -374,7 +382,7 @@ export function buildPreviewLayers(
       if (d) tissot.push(d)
     }
   }
-  return { sphere, land, grat, extentD, tissot, markerPt, chinaBoundary, chinaTenDash }
+  return { sphere, land, grat, extentD, tissot, markerPt, chinaBoundary, chinaTenDash, chinaProvinces }
 }
 
 /** 预览图层样式（spec/07 §2.5 陆地填充教学风格；spec/09 §3.1 经纬网加深标清）：组件内联绑定使用，导出的独立 SVG 因此样式自包含 */

@@ -124,6 +124,8 @@ interface Card {
   chinaBoundary: string
   /** 南海诸岛十段线（仅中国模块，spec/09 §2.5） */
   chinaTenDash: string
+  /** 省级行政边界（仅中国模块，spec/09 §2.5） */
+  chinaProvinces: string
   /** 经纬网经纬度标注（spec/09 §3.1，随图面缩放） */
   gratLabels: GratLabel[]
   /** 投影中心处米/像素（缩放级别 1），比例尺换算用（spec/09 §3.3） */
@@ -162,6 +164,7 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
     grat: layers.grat,
     chinaBoundary: layers.chinaBoundary,
     chinaTenDash: layers.chinaTenDash,
+    chinaProvinces: layers.chinaProvinces,
     gratLabels: deco.gratLabels,
     mmp: deco.metersPerPixel,
     // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
@@ -209,11 +212,13 @@ function scaleBar(mmp: number, zoom: number): { km: number; px: number } {
   return best ?? { km: SCALE_KM[0], px: ((SCALE_KM[0] * 1000) / mmp) * zoom }
 }
 
-/** 图例行（spec/09 §3.4）：常驻陆地/经纬网，中国模块加国界，按坐标查看时追加制图范围/变形椭圆/标记点 */
-type LegendRow = { kind: 'land' | 'border' | 'grat' | 'extent' | 'tissot' | 'marker'; text: string }
+/** 图例行（spec/09 §3.4）：常驻陆地/经纬网，中国模块加国界与省界，按坐标查看时追加制图范围/变形椭圆/标记点 */
+type LegendRow = { kind: 'land' | 'border' | 'province' | 'grat' | 'extent' | 'tissot' | 'marker'; text: string }
 const legendRows = computed<LegendRow[]>(() => {
   const rows: LegendRow[] = [{ kind: 'land', text: '陆地' }]
-  if (moduleView.value === 'china') rows.push({ kind: 'border', text: '国界·十段线' })
+  if (moduleView.value === 'china') {
+    rows.push({ kind: 'border', text: '国界·十段线' }, { kind: 'province', text: '省界' })
+  }
   rows.push({ kind: 'grat', text: '经纬网' })
   if (coordValid.value) {
     rows.push({ kind: 'extent', text: '制图范围' }, { kind: 'tissot', text: '变形椭圆' }, { kind: 'marker', text: '标记点' })
@@ -281,8 +286,9 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
           <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
           <!-- 中国模块不叠世界陆地底图（spec/09 §2.5），只画下面的国界图层 -->
           <path v-if="c.showLand" :d="c.land" v-bind="PREVIEW_STYLE.land" />
-          <!-- 中国国界图层（spec/09 §2.5）：国界轮廓 + 南海诸岛十段线，仅中国模块 -->
+          <!-- 中国国界图层（spec/09 §2.5）：国界轮廓 + 省级行政边界 + 南海诸岛十段线，仅中国模块 -->
           <path v-if="c.chinaBoundary" :d="c.chinaBoundary" class="china-border" />
+          <path v-if="c.chinaProvinces" :d="c.chinaProvinces" class="china-province" />
           <path v-if="c.chinaTenDash" :d="c.chinaTenDash" class="china-nine-dash" />
           <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
           <!-- 经纬网标注（spec/09 §3.1）：随图面缩放的地图内容 -->
@@ -330,6 +336,7 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
               <g v-for="(r, i) in legendRows" :key="r.kind" :transform="`translate(0 ${11 + i * 8.5})`">
                 <rect v-if="r.kind === 'land'" x="4" y="1.5" width="8" height="5" class="lg-land" />
                 <line v-else-if="r.kind === 'border'" x1="4" y1="4" x2="12" y2="4" class="lg-border" />
+                <line v-else-if="r.kind === 'province'" x1="4" y1="4" x2="12" y2="4" class="lg-province" />
                 <line v-else-if="r.kind === 'grat'" x1="4" y1="4" x2="12" y2="4" class="lg-grat" />
                 <rect v-else-if="r.kind === 'extent'" x="4" y="1.5" width="8" height="5" class="lg-extent" />
                 <circle v-else-if="r.kind === 'tissot'" cx="8" cy="4" r="2.6" class="lg-tissot" />
@@ -495,6 +502,12 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   stroke: #2e7d52;
   stroke-width: 0.9;
 }
+.china-province {
+  /* 省级行政边界（spec/09 §2.5）：浅一档的细线，不与国界抢视觉层级 */
+  fill: none;
+  stroke: rgba(46, 125, 82, 0.42);
+  stroke-width: 0.4;
+}
 .china-nine-dash {
   fill: #2e7d52;
 }
@@ -558,6 +571,10 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
 .lg-border {
   stroke: #2e7d52;
   stroke-width: 1.2;
+}
+.lg-province {
+  stroke: rgba(46, 125, 82, 0.42);
+  stroke-width: 0.7;
 }
 .lg-grat {
   stroke: #8bab98;

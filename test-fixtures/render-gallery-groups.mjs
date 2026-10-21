@@ -43,6 +43,7 @@ const cell = (info, def, x, y) => {
       <path d="${L.sphere}" fill="#fbfcfa" stroke="#c9d9c9"/>
       ${def.key === 'china' ? '' : `<path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>`}
       ${L.chinaBoundary ? `<path d="${L.chinaBoundary}" fill="#e9f2e3" stroke="#2e7d52" stroke-width="0.9"/>` : ''}
+      ${L.chinaProvinces ? `<path d="${L.chinaProvinces}" fill="none" stroke="rgba(46,125,82,.42)" stroke-width="0.4"/>` : ''}
       ${L.chinaTenDash ? `<path d="${L.chinaTenDash}" fill="#2e7d52"/>` : ''}
       <path d="${L.grat}" fill="none" stroke="#8bab98" stroke-width="0.7" stroke-dasharray="2.5 2.5"/>
       ${labels}
