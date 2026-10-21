@@ -285,30 +285,46 @@ export interface PreviewLayers {
   markerPt: [number, number] | null
 }
 
+export interface PreviewOptions {
+  /** 区域成图（spec/09 §2.2）：球面/陆地/经纬网裁剪到 extent，不再画范围绿框 */
+  clipToExtent?: boolean
+}
+
 export function buildPreviewLayers(
   info: ProjectionInfo,
   extent: RegionExtent,
   width: number,
   height: number,
   marker?: [number, number],
+  opts?: PreviewOptions,
 ): PreviewLayers {
   const proj = createProjection(info, extent, width, height)
-  const path = geoPath(proj)
 
   // 世界视图的展示带投影：底图、陆地、经纬网都裁到展示带内（完整球面的扇形/无穷区不出画）
   const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null
-  const sphere = path(display ? extentPolygon(display.extent) : { type: 'Sphere' }) ?? ''
-  const land = path(display ? clipLandToExtent(LAND, display.extent) : LAND) ?? ''
+  // 区域成图：整幅即制图区域（spec/09 中国组缩略图）
+  const clip = !display && opts?.clipToExtent ? extent : null
+  if (display || clip) {
+    proj.clipExtent([
+      [0, 0],
+      [width, height],
+    ])
+  }
+  const path = geoPath(proj)
+
+  const region = display?.extent ?? clip
+  const sphere = path(region ? extentPolygon(region) : { type: 'Sphere' }) ?? ''
+  const land = path(region ? clipLandToExtent(LAND, region) : LAND) ?? ''
   const grat =
     path(
-      display
+      region
         ? geoGraticule().extent([
-            [display.extent.minLon, display.extent.minLat],
-            [display.extent.maxLon, display.extent.maxLat],
+            [region.minLon, region.minLat],
+            [region.maxLon, region.maxLat],
           ])()
         : geoGraticule()(),
     ) ?? ''
-  const extentD = isWorldExtent(extent) ? '' : (path(extentPolygon(extent)) ?? '')
+  const extentD = isWorldExtent(extent) || clip ? '' : (path(extentPolygon(extent)) ?? '')
   const markerPt = marker ? (proj(marker) ?? null) : null
 
   // Tissot：区域内 4×3 布点的等半径小圆，投影后的形变直观反映面积/角度变形
@@ -328,11 +344,11 @@ export function buildPreviewLayers(
   return { sphere, land, grat, extentD, tissot, markerPt }
 }
 
-/** 预览图层样式（spec/07 §2.5 陆地填充教学风格）：组件内联绑定使用，导出的独立 SVG 因此样式自包含 */
+/** 预览图层样式（spec/07 §2.5 陆地填充教学风格；spec/09 §3.1 经纬网加深标清）：组件内联绑定使用，导出的独立 SVG 因此样式自包含 */
 export const PREVIEW_STYLE = {
   sphere: { fill: '#fbfcfa', stroke: '#c9d9c9', 'stroke-width': 1 },
   land: { fill: '#e9f2e3', stroke: '#b9cfb2', 'stroke-width': 0.6 },
-  grat: { fill: 'none', stroke: '#c3d8c4', 'stroke-width': 0.5, 'stroke-dasharray': '2 3' },
+  grat: { fill: 'none', stroke: '#a9c8b0', 'stroke-width': 0.6, 'stroke-dasharray': '2 3' },
   extent: { fill: 'rgba(59, 162, 114, 0.12)', stroke: '#2e825b', 'stroke-width': 1.2 },
   tissot: { fill: 'rgba(230, 126, 34, 0.28)', stroke: '#e67e22', 'stroke-width': 0.8 },
 } as const
@@ -346,4 +362,102 @@ export function buildStandaloneSvg(inner: string, width: number, height: number)
     inner +
     `</svg>`
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* spec/09 §3 图面整饰：经纬网标注 + 比例尺换算                            */
+/* ------------------------------------------------------------------ */
+
+/** 经纬网标注（投影后像素坐标；随图面缩放，属地图内容） */
+export interface GratLabel {
+  x: number
+  y: number
+  text: string
+  anchor: 'middle' | 'start'
+}
+
+export interface PreviewDecorations {
+  gratLabels: GratLabel[]
+  /** 投影中心处地面米 / 像素（缩放级别 1 时）；比例尺据此换算（spec/09 §3.3） */
+  metersPerPixel: number
+}
+
+/** 标注间隔：跨度内标 ≤7 条，步长取整十/整十五等教学惯用值 */
+function gratStep(span: number): number {
+  for (const s of [2, 5, 10, 15, 20, 30, 45, 60, 90]) if (span / s <= 7) return s
+  return 90
+}
+
+const fmtLonLabel = (v: number) => (v === 0 ? '0°' : `${Math.abs(v)}°${v > 0 ? 'E' : 'W'}`)
+const fmtLatLabel = (v: number) => (v === 0 ? '0°' : `${Math.abs(v)}°${v > 0 ? 'N' : 'S'}`)
+
+/**
+ * 图面整饰数据（spec/09 §3）：与 buildPreviewLayers 同一投影配置。
+ * 区域图（展示带 / clipToExtent）沿下边缘标经度、左边缘标纬度；
+ * 世界全图沿赤道标经度、沿中央经线标纬度（0° 纬线即赤道，不重复标注）。
+ * 落在画幅外或被指北针/比例尺/图例遮挡的标注自动省略。
+ */
+export function buildPreviewDecorations(
+  info: ProjectionInfo,
+  extent: RegionExtent,
+  width: number,
+  height: number,
+  opts?: PreviewOptions,
+): PreviewDecorations {
+  const proj = createProjection(info, extent, width, height)
+  const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null
+  const clip = !display && opts?.clipToExtent ? extent : null
+  const region = display?.extent ?? clip ?? null
+
+  const gratLabels: GratLabel[] = []
+  // 与四角整饰（指北针/比例尺/图例）的避让区
+  const blocked = (x: number, y: number) =>
+    (x < 26 && y < 26) || // 左上：指北针
+    (x < 104 && y > height - 22) || // 左下：比例尺
+    (x > width - 74 && y > height - 44) // 右下：图例
+
+  if (region) {
+    // 区域图：经度标注沿下边缘，纬度标注沿左边缘
+    const lonStep = gratStep(region.maxLon - region.minLon)
+    for (let lon = Math.ceil(region.minLon / lonStep) * lonStep; lon <= region.maxLon; lon += lonStep) {
+      const pt = proj([lon, region.minLat])
+      if (!pt) continue
+      const x = pt[0]
+      const y = Math.min(pt[1] - 2, height - 3)
+      if (x < 11 || x > width - 11 || y < 9 || blocked(x, y)) continue
+      gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: 'middle' })
+    }
+    const latStep = gratStep(region.maxLat - region.minLat)
+    for (let lat = Math.ceil(region.minLat / latStep) * latStep; lat <= region.maxLat; lat += latStep) {
+      const pt = proj([region.minLon, lat])
+      if (!pt) continue
+      const x = pt[0] + 2.5
+      const y = pt[1] + 1.8
+      if (y < 26 || y > height - 6 || x > width - 20 || blocked(x, y)) continue
+      gratLabels.push({ x, y, text: fmtLatLabel(lat), anchor: 'start' })
+    }
+  } else {
+    // 世界全图：经度标注沿赤道，纬度标注沿中央经线
+    const cm = effectiveParams(info, extent).centralMeridian
+    for (let lon = -120; lon <= 120; lon += 60) {
+      const pt = proj([lon, 0])
+      if (!pt) continue
+      const x = pt[0]
+      const y = pt[1] + 7
+      if (x < 12 || x > width - 12 || y > height - 4 || blocked(x, y)) continue
+      gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: 'middle' })
+    }
+    for (let lat = -60; lat <= 60; lat += 30) {
+      if (lat === 0) continue // 赤道即 0°，经度标注已压在该线上
+      const pt = proj([cm, lat])
+      if (!pt) continue
+      const x = pt[0] + 3
+      const y = pt[1] + 1.8
+      if (y < 8 || y > height - 6 || x > width - 20 || blocked(x, y)) continue
+      gratLabels.push({ x, y, text: fmtLatLabel(lat), anchor: 'start' })
+    }
+  }
+
+  // d3 投影 scale ≈ 投影中心处像素/弧度 → 米/像素 = 地球半径 / scale（教学示意比例尺，局部近似）
+  return { gratLabels, metersPerPixel: 6371000 / proj.scale() }
 }

@@ -97,6 +97,10 @@ function reset() {
       <g :transform="`translate(${tx} ${ty}) scale(${scale})`">
         <slot />
       </g>
+      <!-- 图面整饰层（spec/09 §3.5）：指北针/比例尺/图例不随缩放平移；scale 供比例尺按倍率重算 -->
+      <g class="zm-overlay" pointer-events="none">
+        <slot name="overlay" :scale="scale" />
+      </g>
     </svg>
     <div class="zm-btns">
       <button type="button" title="放大" @click="zoomIn">＋</button>

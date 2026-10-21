@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { PROJECTION_KB } from '@/modules/projection/presets'
+import { PROJECTION_KB, REGION_PRESETS } from '@/modules/projection/presets'
 import { PROPERTY_LABELS, CATEGORY_LABELS } from '@/modules/projection/types'
 import type { DistortionProperty, ProjectionCategory, ProjectionInfo, RegionExtent } from '@/modules/projection/types'
-import { buildPreviewLayers, PREVIEW_STYLE, worldDisplayNote } from '@/modules/projection/d3Factory'
+import {
+  buildPreviewLayers,
+  buildPreviewDecorations,
+  PREVIEW_STYLE,
+  worldDisplayNote,
+  type GratLabel,
+} from '@/modules/projection/d3Factory'
 import { suitabilityAt } from '@/modules/projection/ruleEngine'
 import { effectiveParams, gaussKrugerCentral } from '@/modules/projection/params'
 import ZoomableMap from '@/components/ZoomableMap.vue'
 
-// 默认总览：世界四至渲染经纬网缩略图（spec/07 §2.3）
+// 默认总览：世界组按世界四至、中国组按中国全图四至（含南海诸岛）渲染缩略图（spec/09 §2.2）
 const WORLD: RegionExtent = { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }
+const CHINA: RegionExtent = REGION_PRESETS.find((p) => p.id === 'china')!.extent
 const W = 280
 const H = 180
 
@@ -53,36 +60,53 @@ const coordExtent = computed<RegionExtent>(() => ({
 const fmtLon = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'E' : 'W'}`
 const fmtLat = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'N' : 'S'}`
 
-const cards = computed(() => {
-  const extent = coordValid.value ? coordExtent.value : WORLD
+interface Card {
+  info: ProjectionInfo
+  no: number
+  sphere: string
+  land: string
+  grat: string
+  /** 经纬网经纬度标注（spec/09 §3.1，随图面缩放） */
+  gratLabels: GratLabel[]
+  /** 投影中心处米/像素（缩放级别 1），比例尺换算用（spec/09 §3.3） */
+  mmp: number
+  extentD: string
+  tissot: string[]
+  markerPt: [number, number] | null
+  /** 缩略图副标题（成图范围说明） */
+  scopeNote: string
+  rule?: { hit: boolean; text: string }
+  paramsText?: string
+}
+
+const cards = computed<Card[]>(() => {
   return PROJECTION_KB.filter(
     (info) =>
       (filter.category === 'all' || info.category === filter.category) &&
       (filter.property === 'all' || info.property === filter.property),
   ).map((info) => {
+    // 默认模式：中国组按中国全图四至成图（裁剪到范围）；按坐标查看时两组统一用坐标范围
+    const chinaScope = info.scope === 'china'
+    const extent = coordValid.value ? coordExtent.value : chinaScope ? CHINA : WORLD
+    const clip = !coordValid.value && chinaScope
     // 坐标模式下传入中心点，图面上以圆点标出（spec/07 §2.5）
-    const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined)
-    const card: {
-      info: ProjectionInfo
-      no: number
-      sphere: string
-      land: string
-      grat: string
-      extentD: string
-      tissot: string[]
-      markerPt: [number, number] | null
-      rule?: { hit: boolean; text: string }
-      paramsText?: string
-    } = {
+    const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined, {
+      clipToExtent: clip,
+    })
+    const deco = buildPreviewDecorations(info, extent, W, H, { clipToExtent: clip })
+    const card: Card = {
       info,
       no: PROJECTION_KB.indexOf(info) + 1,
       sphere: layers.sphere,
       land: layers.land,
       grat: layers.grat,
+      gratLabels: deco.gratLabels,
+      mmp: deco.metersPerPixel,
       // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
       extentD: coordValid.value ? layers.extentD : '',
       tissot: coordValid.value ? layers.tissot : [],
       markerPt: layers.markerPt,
+      scopeNote: coordValid.value ? '按坐标定向' : chinaScope ? '中国全图（含南海诸岛）' : (worldDisplayNote(info) ?? '世界全图'),
     }
     if (coordValid.value) {
       card.rule = suitabilityAt(info, coord.lat)
@@ -98,6 +122,39 @@ const cards = computed(() => {
     return card
   })
 })
+
+/** 分组（spec/09 §2.2）：中国地图投影 / 世界地图投影，筛选后空组整组隐藏 */
+const groups = computed(() => [
+  { key: 'china', title: '中国地图投影', items: cards.value.filter((c) => c.info.scope === 'china') },
+  { key: 'world', title: '世界地图投影', items: cards.value.filter((c) => c.info.scope === 'world') },
+])
+
+/** 比例尺（spec/09 §3.3）：取最接近约 52px 的整千米数；zoom 为当前缩放倍率，任意级别下长度重算仍正确 */
+const SCALE_KM = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+function scaleBar(mmp: number, zoom: number): { km: number; px: number } {
+  let best: { km: number; px: number } | null = null
+  for (const km of SCALE_KM) {
+    const px = ((km * 1000) / mmp) * zoom
+    if (px > 92) break
+    if (!best || Math.abs(px - 52) < Math.abs(best.px - 52)) best = { km, px }
+  }
+  return best ?? { km: SCALE_KM[0], px: ((SCALE_KM[0] * 1000) / mmp) * zoom }
+}
+
+/** 图例行（spec/09 §3.4）：常驻陆地/经纬网，按坐标查看时追加制图范围/变形椭圆/标记点 */
+type LegendRow = { kind: 'land' | 'grat' | 'extent' | 'tissot' | 'marker'; text: string }
+const legendRows = computed<LegendRow[]>(() => {
+  const rows: LegendRow[] = [
+    { kind: 'land', text: '陆地' },
+    { kind: 'grat', text: '经纬网' },
+  ]
+  if (coordValid.value) {
+    rows.push({ kind: 'extent', text: '制图范围' }, { kind: 'tissot', text: '变形椭圆' }, { kind: 'marker', text: '标记点' })
+  }
+  return rows
+})
+const LEGEND_W = 56
+const legendH = computed(() => 11 + legendRows.value.length * 8.5)
 </script>
 
 <template>
@@ -118,45 +175,97 @@ const cards = computed(() => {
   </div>
   <p v-if="coord.enabled && !coordValid" class="ctl-warn">请填写合法中心坐标（经度 -180~180，纬度 -90~90）</p>
 
-  <div class="gallery-grid">
-    <div v-for="c in cards" :key="c.info.id" class="gallery-item">
-      <div class="item-head">
-        <span class="item-no">{{ c.no }}</span>
-        <div class="item-names">
-          <b>{{ c.info.zhName }}</b>
-          <span class="item-en">{{ c.info.name }}</span>
+  <template v-for="g in groups" :key="g.key">
+    <section v-if="g.items.length" class="gallery-group">
+      <h3 class="group-title">
+        {{ g.title }}<span class="group-count">· {{ g.items.length }} 幅</span>
+      </h3>
+      <div class="gallery-grid">
+        <div v-for="c in g.items" :key="c.info.id" class="gallery-item">
+          <div class="item-head">
+            <span class="item-no">{{ c.no }}</span>
+            <div class="item-names">
+              <b>{{ c.info.zhName }}</b>
+              <span class="item-en">{{ c.info.name }}</span>
+            </div>
+          </div>
+          <p class="item-tags">
+            <el-tag size="small">{{ CATEGORY_LABELS[c.info.category] }}</el-tag>
+            <el-tag size="small" type="warning">{{ PROPERTY_LABELS[c.info.property] }}</el-tag>
+          </p>
+          <ZoomableMap
+            :width="W"
+            :height="H"
+            :movable="allowMove"
+            :label="`${c.info.zhName}${c.scopeNote}（可缩放）`"
+          >
+            <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
+            <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
+            <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
+            <!-- 经纬网标注（spec/09 §3.1）：随图面缩放的地图内容 -->
+            <text
+              v-for="(t, i) in c.gratLabels"
+              :key="`g${i}`"
+              :x="t.x"
+              :y="t.y"
+              :text-anchor="t.anchor"
+              class="grat-label"
+            >
+              {{ t.text }}
+            </text>
+            <path v-if="c.extentD" :d="c.extentD" v-bind="PREVIEW_STYLE.extent" />
+            <path v-for="(d, i) in c.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
+            <!-- 坐标标记点：光晕 + 实心点（spec/07 §2.5） -->
+            <g v-if="c.markerPt">
+              <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="7" fill="rgba(230, 126, 34, 0.25)" />
+              <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="3" fill="#e67e22" stroke="#fff" stroke-width="1.2" />
+            </g>
+            <!-- 图面整饰（spec/09 §3）：指北针 / 比例尺 / 图例，不随缩放平移 -->
+            <template #overlay="{ scale }">
+              <g transform="translate(13 15)" class="north-arrow">
+                <text x="0" y="-7" text-anchor="middle" class="north-text">N</text>
+                <path d="M0,-5 L3.2,4.8 L0,2.4 L-3.2,4.8 Z" />
+              </g>
+              <g :transform="`translate(8 ${H - 9})`" class="scale-bar">
+                <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px / 2" height="2.6" class="sb-a" />
+                <rect
+                  :x="scaleBar(c.mmp, scale).px / 2"
+                  y="0"
+                  :width="scaleBar(c.mmp, scale).px / 2"
+                  height="2.6"
+                  class="sb-b"
+                />
+                <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px" height="2.6" class="sb-frame" />
+                <text :x="scaleBar(c.mmp, scale).px / 2" y="-2.5" text-anchor="middle" class="sb-text">
+                  {{ scaleBar(c.mmp, scale).km }} km
+                </text>
+                <text x="0" y="8" text-anchor="middle" class="sb-text">0</text>
+              </g>
+              <g :transform="`translate(${W - LEGEND_W - 4} ${H - legendH - 4})`" class="legend-box">
+                <rect width="56" :height="legendH" rx="2.5" class="lg-frame" />
+                <text x="4" y="7.5" class="lg-title">图例</text>
+                <g v-for="(r, i) in legendRows" :key="r.kind" :transform="`translate(0 ${11 + i * 8.5})`">
+                  <rect v-if="r.kind === 'land'" x="4" y="1.5" width="8" height="5" class="lg-land" />
+                  <line v-else-if="r.kind === 'grat'" x1="4" y1="4" x2="12" y2="4" class="lg-grat" />
+                  <rect v-else-if="r.kind === 'extent'" x="4" y="1.5" width="8" height="5" class="lg-extent" />
+                  <circle v-else-if="r.kind === 'tissot'" cx="8" cy="4" r="2.6" class="lg-tissot" />
+                  <circle v-else cx="8" cy="4" r="2" class="lg-marker" />
+                  <text x="15" y="6.5" class="lg-text">{{ r.text }}</text>
+                </g>
+              </g>
+            </template>
+          </ZoomableMap>
+          <template v-if="c.rule">
+            <p class="item-rule" :class="{ miss: !c.rule.hit }">
+              <b>{{ c.rule.hit ? '✓ 规则命中：' : '✗ 规则未命中：' }}</b>{{ c.rule.text }}
+            </p>
+            <p class="item-params"><b>参数：</b>{{ c.paramsText }}</p>
+          </template>
+          <p class="item-reason"><b>推荐缘由：</b>{{ c.info.suitableFor }}；{{ c.info.pros[0] }}</p>
         </div>
       </div>
-      <p class="item-tags">
-        <el-tag size="small">{{ CATEGORY_LABELS[c.info.category] }}</el-tag>
-        <el-tag size="small" type="warning">{{ PROPERTY_LABELS[c.info.property] }}</el-tag>
-      </p>
-      <ZoomableMap
-        :width="W"
-        :height="H"
-        :movable="allowMove"
-        :label="`${c.info.zhName}${coordValid ? '（按坐标定向，可缩放）' : `${worldDisplayNote(c.info) ?? '世界全图'}（可缩放）`}`"
-      >
-        <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
-        <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
-        <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
-        <path v-if="c.extentD" :d="c.extentD" v-bind="PREVIEW_STYLE.extent" />
-        <path v-for="(d, i) in c.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
-        <!-- 坐标标记点：光晕 + 实心点（spec/07 §2.5） -->
-        <g v-if="c.markerPt">
-          <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="7" fill="rgba(230, 126, 34, 0.25)" />
-          <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="3" fill="#e67e22" stroke="#fff" stroke-width="1.2" />
-        </g>
-      </ZoomableMap>
-      <template v-if="c.rule">
-        <p class="item-rule" :class="{ miss: !c.rule.hit }">
-          <b>{{ c.rule.hit ? '✓ 规则命中：' : '✗ 规则未命中：' }}</b>{{ c.rule.text }}
-        </p>
-        <p class="item-params"><b>参数：</b>{{ c.paramsText }}</p>
-      </template>
-      <p class="item-reason"><b>推荐缘由：</b>{{ c.info.suitableFor }}；{{ c.info.pros[0] }}</p>
-    </div>
-  </div>
+    </section>
+  </template>
 </template>
 
 <style scoped>
@@ -186,6 +295,22 @@ const cards = computed(() => {
   margin: -6px 0 10px;
   font-size: 12px;
   color: var(--el-color-danger);
+}
+.gallery-group {
+  margin-bottom: 18px;
+}
+.group-title {
+  margin: 4px 0 10px;
+  font-size: 15px;
+  color: #1f7a4d;
+  border-left: 4px solid #2e825b;
+  padding-left: 8px;
+}
+.group-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--el-text-color-secondary);
 }
 .gallery-grid {
   display: grid;
@@ -253,6 +378,85 @@ const cards = computed(() => {
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--el-text-color-regular);
+}
+
+/* 图面整饰样式（spec/09 §3） */
+.grat-label {
+  font-size: 5px;
+  fill: #4e7a5c;
+  paint-order: stroke;
+  stroke: #fbfcfa;
+  stroke-width: 1.2px;
+}
+.north-arrow path {
+  fill: #2e5c40;
+  stroke: #fff;
+  stroke-width: 0.5;
+}
+.north-text {
+  font-size: 6.5px;
+  font-weight: bold;
+  fill: #2e5c40;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 1px;
+}
+.scale-bar .sb-a {
+  fill: #374f3f;
+}
+.scale-bar .sb-b {
+  fill: #fff;
+}
+.scale-bar .sb-frame {
+  fill: none;
+  stroke: #374f3f;
+  stroke-width: 0.5;
+}
+.sb-text {
+  font-size: 5.5px;
+  fill: #374f3f;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1px;
+}
+.legend-box .lg-frame {
+  fill: rgba(255, 255, 255, 0.88);
+  stroke: #cfe0d4;
+  stroke-width: 0.6;
+}
+.lg-title {
+  font-size: 6px;
+  font-weight: bold;
+  fill: #2e5c40;
+}
+.lg-text {
+  font-size: 5.5px;
+  fill: #3d5a45;
+}
+.lg-land {
+  fill: #e9f2e3;
+  stroke: #b9cfb2;
+  stroke-width: 0.6;
+}
+.lg-grat {
+  stroke: #a9c8b0;
+  stroke-width: 0.9;
+  stroke-dasharray: 2 2;
+}
+.lg-extent {
+  fill: rgba(59, 162, 114, 0.12);
+  stroke: #2e825b;
+  stroke-width: 0.8;
+}
+.lg-tissot {
+  fill: rgba(230, 126, 34, 0.28);
+  stroke: #e67e22;
+  stroke-width: 0.6;
+}
+.lg-marker {
+  fill: #e67e22;
+  stroke: #fff;
+  stroke-width: 0.6;
 }
 
 /* 响应式（spec/04 §9）：平板 2 列、手机 1 列 */
