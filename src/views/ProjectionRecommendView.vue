@@ -10,8 +10,7 @@ import { effectiveParams } from '@/modules/projection/params'
 import { buildProj4, buildWkt, epsgHint } from '@/modules/projection/exporters'
 import ProjectionPreview from '@/components/ProjectionPreview.vue'
 import ProjectionGallery from '@/components/ProjectionGallery.vue'
-// spec/08 投影实验室（另一会话进行中，组件文件未提交；恢复时取消下行注释）
-// import ProjectionLab from '@/components/ProjectionLab.vue'
+import ProjectionLab from '@/components/ProjectionLab.vue'
 import ExtentMapPicker from '@/components/ExtentMapPicker.vue'
 import CoordConverter from '@/components/CoordConverter.vue'
 
@@ -196,7 +195,7 @@ async function copyText(text: string, label: string) {
 
     <!-- 投影实验室 + 教学助手（spec/08）：自然语言直接驱动 A/B 投影实验 -->
     <!-- 组件未提交（另一会话进行中），恢复时取消下行注释 -->
-    <!-- <ProjectionLab /> -->
+    <ProjectionLab />
 
     <template v-if="results.length && lastExtent">
       <el-alert
