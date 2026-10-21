@@ -2413,12 +2413,17 @@ function buildPreviewLayers(info, extent, width, height, marker, opts) {
   const region = display?.extent ?? clip;
   const sphere = path(region ? extentPolygon(region) : { type: "Sphere" }) ?? "";
   const land = path(region ? clipLandToExtent(LAND, region) : LAND) ?? "";
-  const grat = path(
-    region ? graticule().extent([
+  const worldView = isWorldExtent(extent);
+  const wideWorld = worldView && (!display || display.extent.maxLon - display.extent.minLon >= 300);
+  const gratStepDeg = wideWorld ? info.category === "azimuthal" ? [15, 15] : [30, 30] : [10, 10];
+  const gratGeo = graticule().step(gratStepDeg);
+  if (region) {
+    gratGeo.extent([
       [region.minLon, region.minLat],
       [region.maxLon, region.maxLat]
-    ])() : graticule()()
-  ) ?? "";
+    ]);
+  }
+  const grat = path(gratGeo()) ?? "";
   const extentD = isWorldExtent(extent) || clip ? "" : path(extentPolygon(extent)) ?? "";
   const markerPt = marker ? proj(marker) ?? null : null;
   const lonSpan = extent.maxLon - extent.minLon;
@@ -2439,7 +2444,7 @@ function buildPreviewLayers(info, extent, width, height, marker, opts) {
 var PREVIEW_STYLE = {
   sphere: { fill: "#fbfcfa", stroke: "#c9d9c9", "stroke-width": 1 },
   land: { fill: "#e9f2e3", stroke: "#b9cfb2", "stroke-width": 0.6 },
-  grat: { fill: "none", stroke: "#a9c8b0", "stroke-width": 0.6, "stroke-dasharray": "2 3" },
+  grat: { fill: "none", stroke: "#8bab98", "stroke-width": 0.7, "stroke-dasharray": "2.5 2.5" },
   extent: { fill: "rgba(59, 162, 114, 0.12)", stroke: "#2e825b", "stroke-width": 1.2 },
   tissot: { fill: "rgba(230, 126, 34, 0.28)", stroke: "#e67e22", "stroke-width": 0.8 }
 };
@@ -2457,19 +2462,24 @@ function buildPreviewDecorations(info, extent, width, height, opts) {
   const proj = createProjection(info, extent, width, height);
   const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null;
   const clip = !display && opts?.clipToExtent ? extent : null;
-  const region = display?.extent ?? clip ?? null;
+  const wideBand = display && display.extent.maxLon - display.extent.minLon >= 300;
+  const region = display && !wideBand ? display.extent : clip ?? null;
   const gratLabels = [];
   const blocked = (x, y) => x < 26 && y < 26 || // 左上：指北针
   x < 104 && y > height - 22 || // 左下：比例尺
   x > width - 74 && y > height - 44;
   if (region) {
-    const lonStep = gratStep(region.maxLon - region.minLon);
+    const lonSpan = region.maxLon - region.minLon;
+    const lonStep = gratStep(lonSpan);
+    let lastLonX = Number.NEGATIVE_INFINITY;
     for (let lon = Math.ceil(region.minLon / lonStep) * lonStep; lon <= region.maxLon; lon += lonStep) {
       const pt = proj([lon, region.minLat]);
       if (!pt) continue;
       const x = pt[0];
+      if (x - lastLonX < 16) continue;
       const y = Math.min(pt[1] - 2, height - 3);
       if (x < 11 || x > width - 11 || y < 9 || blocked(x, y)) continue;
+      lastLonX = x;
       gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: "middle" });
     }
     const latStep = gratStep(region.maxLat - region.minLat);
@@ -2483,15 +2493,19 @@ function buildPreviewDecorations(info, extent, width, height, opts) {
     }
   } else {
     const cm = effectiveParams(info, extent).centralMeridian;
+    let lastLonX = Number.NEGATIVE_INFINITY;
     for (let lon = -120; lon <= 120; lon += 60) {
       const pt = proj([lon, 0]);
       if (!pt) continue;
       const x = pt[0];
+      if (x - lastLonX < 16) continue;
       const y = pt[1] + 7;
       if (x < 12 || x > width - 12 || y > height - 4 || blocked(x, y)) continue;
+      lastLonX = x;
       gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: "middle" });
     }
-    for (let lat = -60; lat <= 60; lat += 30) {
+    const latStepDeg = info.category === "azimuthal" ? 60 : 30;
+    for (let lat = -60; lat <= 60; lat += latStepDeg) {
       if (lat === 0) continue;
       const pt = proj([cm, lat]);
       if (!pt) continue;

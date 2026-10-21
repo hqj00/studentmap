@@ -315,15 +315,24 @@ export function buildPreviewLayers(
   const region = display?.extent ?? clip
   const sphere = path(region ? extentPolygon(region) : { type: 'Sphere' }) ?? ''
   const land = path(region ? clipLandToExtent(LAND, region) : LAND) ?? ''
-  const grat =
-    path(
-      region
-        ? geoGraticule().extent([
-            [region.minLon, region.minLat],
-            [region.maxLon, region.maxLat],
-          ])()
-        : geoGraticule()(),
-    ) ?? ''
+  // 经纬网间隔（spec/09 §3.1）：区域图 10° 细网（中国全图惯例）；世界全图 30°（挂图惯例，缩略图下清晰）；
+  // 方位类全球图 15°（极区/半球图的经纬圈更密，30° 只剩两三圈）；墨卡托等跨 360° 的展示带同样取 30°。
+  // 判断依据是成图范围本身（isWorldExtent），而非是否裁剪——推荐方案预览不裁剪，中国范围也应是 10° 网
+  const worldView = isWorldExtent(extent)
+  const wideWorld = worldView && (!display || display.extent.maxLon - display.extent.minLon >= 300)
+  const gratStepDeg: [number, number] = wideWorld
+    ? info.category === 'azimuthal'
+      ? [15, 15]
+      : [30, 30]
+    : [10, 10]
+  const gratGeo = geoGraticule().step(gratStepDeg)
+  if (region) {
+    gratGeo.extent([
+      [region.minLon, region.minLat],
+      [region.maxLon, region.maxLat],
+    ])
+  }
+  const grat = path(gratGeo()) ?? ''
   const extentD = isWorldExtent(extent) || clip ? '' : (path(extentPolygon(extent)) ?? '')
   const markerPt = marker ? (proj(marker) ?? null) : null
 
@@ -348,7 +357,7 @@ export function buildPreviewLayers(
 export const PREVIEW_STYLE = {
   sphere: { fill: '#fbfcfa', stroke: '#c9d9c9', 'stroke-width': 1 },
   land: { fill: '#e9f2e3', stroke: '#b9cfb2', 'stroke-width': 0.6 },
-  grat: { fill: 'none', stroke: '#a9c8b0', 'stroke-width': 0.6, 'stroke-dasharray': '2 3' },
+  grat: { fill: 'none', stroke: '#8bab98', 'stroke-width': 0.7, 'stroke-dasharray': '2.5 2.5' },
   extent: { fill: 'rgba(59, 162, 114, 0.12)', stroke: '#2e825b', 'stroke-width': 1.2 },
   tissot: { fill: 'rgba(230, 126, 34, 0.28)', stroke: '#e67e22', 'stroke-width': 0.8 },
 } as const
@@ -407,7 +416,10 @@ export function buildPreviewDecorations(
   const proj = createProjection(info, extent, width, height)
   const display = isWorldExtent(extent) ? worldDisplayConfig(info) : null
   const clip = !display && opts?.clipToExtent ? extent : null
-  const region = display?.extent ?? clip ?? null
+  // 跨 360° 的展示带（墨卡托 ±85°）仍按世界全图标注（沿赤道/中央经线）；
+  // 中纬展示带（圆锥、高斯）与中国组才按区域图标注
+  const wideBand = display && display.extent.maxLon - display.extent.minLon >= 300
+  const region = display && !wideBand ? display.extent : (clip ?? null)
 
   const gratLabels: GratLabel[] = []
   // 与四角整饰（指北针/比例尺/图例）的避让区
@@ -417,14 +429,18 @@ export function buildPreviewDecorations(
     (x > width - 74 && y > height - 44) // 右下：图例
 
   if (region) {
-    // 区域图：经度标注沿下边缘，纬度标注沿左边缘
-    const lonStep = gratStep(region.maxLon - region.minLon)
+    // 区域图：经度标注沿下边缘，纬度标注沿左边缘（间隔随跨度自适应，缩略图尺寸下保证不挤）
+    const lonSpan = region.maxLon - region.minLon
+    const lonStep = gratStep(lonSpan)
+    let lastLonX = Number.NEGATIVE_INFINITY
     for (let lon = Math.ceil(region.minLon / lonStep) * lonStep; lon <= region.maxLon; lon += lonStep) {
       const pt = proj([lon, region.minLat])
       if (!pt) continue
       const x = pt[0]
+      if (x - lastLonX < 16) continue
       const y = Math.min(pt[1] - 2, height - 3)
       if (x < 11 || x > width - 11 || y < 9 || blocked(x, y)) continue
+      lastLonX = x
       gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: 'middle' })
     }
     const latStep = gratStep(region.maxLat - region.minLat)
@@ -437,17 +453,22 @@ export function buildPreviewDecorations(
       gratLabels.push({ x, y, text: fmtLatLabel(lat), anchor: 'start' })
     }
   } else {
-    // 世界全图：经度标注沿赤道，纬度标注沿中央经线
+    // 世界全图：经度标注沿赤道（每 60°，缩略图上比 30° 更清爽），纬度标注沿中央经线
     const cm = effectiveParams(info, extent).centralMeridian
+    let lastLonX = Number.NEGATIVE_INFINITY
     for (let lon = -120; lon <= 120; lon += 60) {
       const pt = proj([lon, 0])
       if (!pt) continue
       const x = pt[0]
+      if (x - lastLonX < 16) continue
       const y = pt[1] + 7
       if (x < 12 || x > width - 12 || y > height - 4 || blocked(x, y)) continue
+      lastLonX = x
       gratLabels.push({ x, y, text: fmtLonLabel(lon), anchor: 'middle' })
     }
-    for (let lat = -60; lat <= 60; lat += 30) {
+    // 方位类全球图的 30°N/30°S 紧贴投影中心，缩略图上与中心标注叠成一团，只留 ±60°
+    const latStepDeg = info.category === 'azimuthal' ? 60 : 30
+    for (let lat = -60; lat <= 60; lat += latStepDeg) {
       if (lat === 0) continue // 赤道即 0°，经度标注已压在该线上
       const pt = proj([cm, lat])
       if (!pt) continue

@@ -460,9 +460,9 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   stroke-width: 0.6;
 }
 .lg-grat {
-  stroke: #a9c8b0;
+  stroke: #8bab98;
   stroke-width: 0.9;
-  stroke-dasharray: 2 2;
+  stroke-dasharray: 2.5 2.5;
 }
 .lg-extent {
   fill: rgba(59, 162, 114, 0.12);

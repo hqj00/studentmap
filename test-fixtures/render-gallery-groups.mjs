@@ -37,7 +37,7 @@ const cell = (info, def, x, y) => {
     <g transform="translate(0,22)">
       <path d="${L.sphere}" fill="#fbfcfa" stroke="#c9d9c9"/>
       <path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>
-      <path d="${L.grat}" fill="none" stroke="#a9c8b0" stroke-width="0.6" stroke-dasharray="2 3"/>
+      <path d="${L.grat}" fill="none" stroke="#8bab98" stroke-width="0.7" stroke-dasharray="2.5 2.5"/>
       ${labels}
       <!-- 指北针 -->
       <g transform="translate(13 15)">
@@ -61,7 +61,7 @@ const cell = (info, def, x, y) => {
           <text x="15" y="6.5" font-size="5.5" fill="#3d5a45">陆地</text>
         </g>
         <g transform="translate(0 19.5)">
-          <line x1="4" y1="4" x2="12" y2="4" stroke="#a9c8b0" stroke-width="0.9" stroke-dasharray="2 2"/>
+          <line x1="4" y1="4" x2="12" y2="4" stroke="#8bab98" stroke-width="0.9" stroke-dasharray="2.5 2.5"/>
           <text x="15" y="6.5" font-size="5.5" fill="#3d5a45">经纬网</text>
         </g>
       </g>
