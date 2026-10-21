@@ -279,11 +279,11 @@ async function copyText(text: string, label: string) {
       </el-card>
     </template>
 
-    <!-- 18 幅投影总览（spec/07 §2.2 + spec/09 分组）：中国/世界两组，每幅附推荐缘由与图面整饰，点击卡片头展开/收起 -->
+    <!-- 投影总览（spec/07 §2.2 + spec/09）：18 种投影 × 中国/世界两种成图区域，每幅附推荐缘由与图面整饰，点击卡片头展开/收起 -->
     <el-card shadow="never" class="mt gallery-card">
       <template #header>
         <div class="gallery-toggle" @click="galleryOpen = !galleryOpen">
-          <span>投影总览 · 18 幅（中国地图投影 4 · 世界地图投影 14）</span>
+          <span>投影总览 · 18 种投影 × 中国/世界两种成图区域（共 36 幅）</span>
           <el-button text type="primary">{{ galleryOpen ? '收起' : '展开' }}</el-button>
         </div>
       </template>

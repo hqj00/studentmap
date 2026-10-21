@@ -14,11 +14,23 @@ import { suitabilityAt } from '@/modules/projection/ruleEngine'
 import { effectiveParams, gaussKrugerCentral } from '@/modules/projection/params'
 import ZoomableMap from '@/components/ZoomableMap.vue'
 
-// 默认总览：世界组按世界四至、中国组按中国全图四至（含南海诸岛）渲染缩略图（spec/09 §2.2）
+// 两个模块 = 同 18 种投影分别在「中国全图」与「世界全图」两种成图区域上的渲染（spec/09 §2）
 const WORLD: RegionExtent = { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }
 const CHINA: RegionExtent = REGION_PRESETS.find((p) => p.id === 'china')!.extent
 const W = 280
 const H = 180
+
+/** 成图区域模块定义（spec/09 §2.2）：中国组裁剪到中国全图四至，世界组走原有展示带退化规则 */
+interface RegionGroupDef {
+  key: 'china' | 'world'
+  title: string
+  extent: RegionExtent
+  clip: boolean
+}
+const REGION_GROUPS: RegionGroupDef[] = [
+  { key: 'china', title: '中国地图投影', extent: CHINA, clip: true },
+  { key: 'world', title: '世界地图投影', extent: WORLD, clip: false },
+]
 
 /** 分类筛选（spec/07 §2.4）：投影面类别 × 变形性质 */
 const filter = reactive({
@@ -60,6 +72,15 @@ const coordExtent = computed<RegionExtent>(() => ({
 const fmtLon = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'E' : 'W'}`
 const fmtLat = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'N' : 'S'}`
 
+/** 筛选后的投影列表：两个模块共用同一份（每种投影在中国、世界各出现一次） */
+const filtered = computed(() =>
+  PROJECTION_KB.filter(
+    (info) =>
+      (filter.category === 'all' || info.category === filter.category) &&
+      (filter.property === 'all' || info.property === filter.property),
+  ),
+)
+
 interface Card {
   info: ProjectionInfo
   no: number
@@ -79,55 +100,55 @@ interface Card {
   paramsText?: string
 }
 
-const cards = computed<Card[]>(() => {
-  return PROJECTION_KB.filter(
-    (info) =>
-      (filter.category === 'all' || info.category === filter.category) &&
-      (filter.property === 'all' || info.property === filter.property),
-  ).map((info) => {
-    // 默认模式：中国组按中国全图四至成图（裁剪到范围）；按坐标查看时两组统一用坐标范围
-    const chinaScope = info.scope === 'china'
-    const extent = coordValid.value ? coordExtent.value : chinaScope ? CHINA : WORLD
-    const clip = !coordValid.value && chinaScope
-    // 坐标模式下传入中心点，图面上以圆点标出（spec/07 §2.5）
-    const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined, {
-      clipToExtent: clip,
-    })
-    const deco = buildPreviewDecorations(info, extent, W, H, { clipToExtent: clip })
-    const card: Card = {
-      info,
-      no: PROJECTION_KB.indexOf(info) + 1,
-      sphere: layers.sphere,
-      land: layers.land,
-      grat: layers.grat,
-      gratLabels: deco.gratLabels,
-      mmp: deco.metersPerPixel,
-      // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
-      extentD: coordValid.value ? layers.extentD : '',
-      tissot: coordValid.value ? layers.tissot : [],
-      markerPt: layers.markerPt,
-      scopeNote: coordValid.value ? '按坐标定向' : chinaScope ? '中国全图（含南海诸岛）' : (worldDisplayNote(info) ?? '世界全图'),
-    }
-    if (coordValid.value) {
-      card.rule = suitabilityAt(info, coord.lat)
-      const p = effectiveParams(info, extent)
-      const parts = [`中央经线 ${fmtLon(p.centralMeridian)}`]
-      if (p.standardParallels?.length) parts.push(`标准纬线 ${p.standardParallels.map(fmtLat).join(' / ')}`)
-      if (info.id === 'transverse-mercator') {
-        const band = Math.floor(coord.lon / 6) + 1
-        parts.push(`该经度属 6° 带第 ${band} 带（带中央经线 ${fmtLon(gaussKrugerCentral(coord.lon))}）`)
-      }
-      card.paramsText = parts.join('；')
-    }
-    return card
+/** 按模块区域渲染一张缩略图卡片；按坐标查看时两模块统一用坐标范围（spec/07 §2.4） */
+function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
+  const extent = coordValid.value ? coordExtent.value : def.extent
+  const clip = !coordValid.value && def.clip
+  // 坐标模式下传入中心点，图面上以圆点标出（spec/07 §2.5）
+  const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined, {
+    clipToExtent: clip,
   })
-})
+  const deco = buildPreviewDecorations(info, extent, W, H, { clipToExtent: clip })
+  const card: Card = {
+    info,
+    no: PROJECTION_KB.indexOf(info) + 1,
+    sphere: layers.sphere,
+    land: layers.land,
+    grat: layers.grat,
+    gratLabels: deco.gratLabels,
+    mmp: deco.metersPerPixel,
+    // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
+    extentD: coordValid.value ? layers.extentD : '',
+    tissot: coordValid.value ? layers.tissot : [],
+    markerPt: layers.markerPt,
+    scopeNote: coordValid.value
+      ? '按坐标定向'
+      : def.key === 'china'
+        ? '中国全图（含南海诸岛）'
+        : (worldDisplayNote(info) ?? '世界全图'),
+  }
+  if (coordValid.value) {
+    card.rule = suitabilityAt(info, coord.lat)
+    const p = effectiveParams(info, extent)
+    const parts = [`中央经线 ${fmtLon(p.centralMeridian)}`]
+    if (p.standardParallels?.length) parts.push(`标准纬线 ${p.standardParallels.map(fmtLat).join(' / ')}`)
+    if (info.id === 'transverse-mercator') {
+      const band = Math.floor(coord.lon / 6) + 1
+      parts.push(`该经度属 6° 带第 ${band} 带（带中央经线 ${fmtLon(gaussKrugerCentral(coord.lon))}）`)
+    }
+    card.paramsText = parts.join('；')
+  }
+  return card
+}
 
-/** 分组（spec/09 §2.2）：中国地图投影 / 世界地图投影，筛选后空组整组隐藏 */
-const groups = computed(() => [
-  { key: 'china', title: '中国地图投影', items: cards.value.filter((c) => c.info.scope === 'china') },
-  { key: 'world', title: '世界地图投影', items: cards.value.filter((c) => c.info.scope === 'world') },
-])
+/** 分组（spec/09 §2.2）：每个模块都是同 18 种投影，只是成图区域不同；筛选为空时整组隐藏 */
+const groups = computed(() =>
+  REGION_GROUPS.map((def) => ({
+    key: def.key,
+    title: def.title,
+    items: filtered.value.map((info) => buildCard(info, def)),
+  })),
+)
 
 /** 比例尺（spec/09 §3.3）：取最接近约 52px 的整千米数；zoom 为当前缩放倍率，任意级别下长度重算仍正确 */
 const SCALE_KM = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
@@ -171,7 +192,7 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
       <el-input-number v-model="coord.lon" :min="-180" :max="180" :step="1" placeholder="经度" class="ctl-num" />
       <el-input-number v-model="coord.lat" :min="-90" :max="90" :step="1" placeholder="纬度" class="ctl-num" />
     </template>
-    <span class="ctl-count">符合筛选：{{ cards.length }} / 18</span>
+    <span class="ctl-count">符合筛选：{{ filtered.length }} / 18（每个模块）</span>
   </div>
   <p v-if="coord.enabled && !coordValid" class="ctl-warn">请填写合法中心坐标（经度 -180~180，纬度 -90~90）</p>
 

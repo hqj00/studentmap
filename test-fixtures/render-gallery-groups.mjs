@@ -1,5 +1,5 @@
-// 离线复刻 ProjectionGallery 分组+图面整饰（spec/09）：中国组按中国全图四至成图、世界组按世界四至；
-// 每幅含经纬网标注、指北针、比例尺、图例 —— 用于离线核对 spec/09 验收 1/3/4
+// 离线复刻 ProjectionGallery 分区+图面整饰（spec/09 v0.2）：两个模块各含全部 18 种投影，
+// 中国组按中国全图四至裁剪成图、世界组按世界四至（展示带规则）；共 36 幅。
 import { writeFileSync } from 'node:fs'
 import { buildPreviewLayers, buildPreviewDecorations } from './d3Factory.bundle.mjs'
 import { PROJECTION_KB, REGION_PRESETS } from './presets.bundle.mjs'
@@ -21,11 +21,9 @@ function scaleBar(mmp, zoom) {
   return best ?? { km: SCALE_KM[0], px: ((SCALE_KM[0] * 1000) / mmp) * zoom }
 }
 
-const cell = (info, x, y) => {
-  const chinaScope = info.scope === 'china'
-  const extent = chinaScope ? CHINA : WORLD
-  const L = buildPreviewLayers(info, extent, W, H, undefined, { clipToExtent: chinaScope })
-  const deco = buildPreviewDecorations(info, extent, W, H, { clipToExtent: chinaScope })
+const cell = (info, def, x, y) => {
+  const L = buildPreviewLayers(info, def.extent, W, H, undefined, { clipToExtent: def.clip })
+  const deco = buildPreviewDecorations(info, def.extent, W, H, { clipToExtent: def.clip })
   const sb = scaleBar(deco.metersPerPixel, 1)
   const labels = deco.gratLabels
     .map(
@@ -35,7 +33,7 @@ const cell = (info, x, y) => {
     .join('')
   return `<g transform="translate(${x},${y})">
     <rect width="${W}" height="${H + 22}" fill="#fff" stroke="#ccc"/>
-    <text x="6" y="15" font-size="12" font-family="sans-serif">${PROJECTION_KB.indexOf(info) + 1}. ${info.zhName}（${chinaScope ? '中国' : '世界'}）</text>
+    <text x="6" y="15" font-size="12" font-family="sans-serif">${PROJECTION_KB.indexOf(info) + 1}. ${info.zhName}（${def.key === 'china' ? '中国' : '世界'}）</text>
     <g transform="translate(0,22)">
       <path d="${L.sphere}" fill="#fbfcfa" stroke="#c9d9c9"/>
       <path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>
@@ -72,8 +70,8 @@ const cell = (info, x, y) => {
 }
 
 const groups = [
-  { title: '中国地图投影', items: PROJECTION_KB.filter((p) => p.scope === 'china') },
-  { title: '世界地图投影', items: PROJECTION_KB.filter((p) => p.scope === 'world') },
+  { key: 'china', title: '中国地图投影', extent: CHINA, clip: true, items: PROJECTION_KB },
+  { key: 'world', title: '世界地图投影', extent: WORLD, clip: false, items: PROJECTION_KB },
 ]
 let y = 0
 const parts = []
@@ -81,7 +79,7 @@ for (const g of groups) {
   parts.push(`<text x="4" y="${y + 18}" font-size="16" font-weight="bold" font-family="sans-serif" fill="#1f7a4d">${g.title} · ${g.items.length} 幅</text>`)
   y += 26
   g.items.forEach((info, i) => {
-    parts.push(cell(info, (i % COLS) * (W + 10), y + Math.floor(i / COLS) * (H + 32)))
+    parts.push(cell(info, g, (i % COLS) * (W + 10), y + Math.floor(i / COLS) * (H + 32)))
   })
   y += Math.ceil(g.items.length / COLS) * (H + 32) + 10
 }

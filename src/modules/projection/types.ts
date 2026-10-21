@@ -42,8 +42,6 @@ export interface ProjectionInfo {
   zhName: string
   category: ProjectionCategory
   property: DistortionProperty
-  /** 总览分组（spec/09 §2.1）：china=中国地图投影，world=世界地图投影 */
-  scope: 'china' | 'world'
   typicalParams?: ProjectionParams
   suitableFor: string
   /** 优点（供双方案对比展示） */
