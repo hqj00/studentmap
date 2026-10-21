@@ -6,6 +6,8 @@ import { PROJECTION_KB, REGION_PRESETS } from './presets.bundle.mjs'
 
 const WORLD = { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }
 const CHINA = REGION_PRESETS.find((p) => p.id === 'china').extent
+// 与 ProjectionGallery 一致：向南扩到 3.2°N，保证十段线最南段不被裁掉
+const CHINA_MAP = { ...CHINA, minLat: 3.2 }
 const W = 280
 const H = 180
 const COLS = 3
@@ -22,7 +24,10 @@ function scaleBar(mmp, zoom) {
 }
 
 const cell = (info, def, x, y) => {
-  const L = buildPreviewLayers(info, def.extent, W, H, undefined, { clipToExtent: def.clip })
+  const L = buildPreviewLayers(info, def.extent, W, H, undefined, {
+    clipToExtent: def.clip,
+    chinaBoundary: def.key === 'china',
+  })
   const deco = buildPreviewDecorations(info, def.extent, W, H, { clipToExtent: def.clip })
   const sb = scaleBar(deco.metersPerPixel, 1)
   const labels = deco.gratLabels
@@ -37,6 +42,8 @@ const cell = (info, def, x, y) => {
     <g transform="translate(0,22)">
       <path d="${L.sphere}" fill="#fbfcfa" stroke="#c9d9c9"/>
       <path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>
+      ${L.chinaBoundary ? `<path d="${L.chinaBoundary}" fill="rgba(59,162,114,.14)" stroke="#2e7d52" stroke-width="0.9"/>` : ''}
+      ${L.chinaTenDash ? `<path d="${L.chinaTenDash}" fill="#2e7d52"/>` : ''}
       <path d="${L.grat}" fill="none" stroke="#8bab98" stroke-width="0.7" stroke-dasharray="2.5 2.5"/>
       ${labels}
       <!-- 指北针 -->
@@ -70,7 +77,7 @@ const cell = (info, def, x, y) => {
 }
 
 const groups = [
-  { key: 'china', title: '中国地图投影', extent: CHINA, clip: true, items: PROJECTION_KB },
+  { key: 'china', title: '中国地图投影', extent: CHINA_MAP, clip: true, items: PROJECTION_KB },
   { key: 'world', title: '世界地图投影', extent: WORLD, clip: false, items: PROJECTION_KB },
 ]
 let y = 0

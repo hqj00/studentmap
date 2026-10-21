@@ -21,6 +21,9 @@ import { geoCylindricalEqualArea, geoMollweide, geoPolyconic, geoRobinson, geoSi
 import { feature } from 'topojson-client'
 import type { GeometryObject, Topology } from 'topojson-specification'
 import landTopo from '@/assets/land-110m.json'
+// 中国国界矢量（spec/09 §2.5）：阿里云 DataV GeoAtlas 标准国界数据，含台湾、港澳、
+// 南海诸岛与十段线；体量小，直接内置以保证离线可用（仅作教学示意）
+import chinaBoundaryData from '@/assets/china-boundary.json'
 import type { ProjectionInfo, RegionExtent } from './types'
 import { effectiveParams } from './params'
 
@@ -29,6 +32,18 @@ const LAND = feature(
   landTopo as unknown as Topology,
   (landTopo as unknown as Topology).objects.land as GeometryObject,
 ) as unknown as GeoPermissibleObjects
+
+/** 中国国界轮廓（面；含全部岛礁） */
+const CHINA_BOUNDARY = {
+  type: 'FeatureCollection',
+  features: [(chinaBoundaryData as { features: unknown[] }).features[0]],
+} as unknown as GeoPermissibleObjects
+
+/** 南海诸岛十段线（细长面要素，按填充呈现为线段） */
+const CHINA_TEN_DASH = {
+  type: 'FeatureCollection',
+  features: [(chinaBoundaryData as { features: unknown[] }).features[1]],
+} as unknown as GeoPermissibleObjects
 
 /** 制图范围的 GeoJSON 外框（预览绿框 / fitExtent 目标）。环必须顺时针（d3 球面多边形约定），否则会被当作补集 */
 export function extentPolygon(e: RegionExtent): GeoPermissibleObjects {
@@ -283,11 +298,17 @@ export interface PreviewLayers {
   tissot: string[]
   /** 坐标标记点（投影后像素坐标；落在裁剪区外时为 null，不绘制） */
   markerPt: [number, number] | null
+  /** 中国国界轮廓（spec/09 §2.5；仅 opts.chinaBoundary 时生成，否则为空串） */
+  chinaBoundary: string
+  /** 南海诸岛十段线（spec/09 §2.5；仅 opts.chinaBoundary 时生成，否则为空串） */
+  chinaTenDash: string
 }
 
 export interface PreviewOptions {
   /** 区域成图（spec/09 §2.2）：球面/陆地/经纬网裁剪到 extent，不再画范围绿框 */
   clipToExtent?: boolean
+  /** 叠加完整中国国界图层（含台湾、南海诸岛与十段线；spec/09 §2.5） */
+  chinaBoundary?: boolean
 }
 
 export function buildPreviewLayers(
@@ -315,6 +336,9 @@ export function buildPreviewLayers(
   const region = display?.extent ?? clip
   const sphere = path(region ? extentPolygon(region) : { type: 'Sphere' }) ?? ''
   const land = path(region ? clipLandToExtent(LAND, region) : LAND) ?? ''
+  // 中国国界图层（spec/09 §2.5）：与陆地同一投影，clipExtent 下自动裁到画幅
+  const chinaBoundary = opts?.chinaBoundary ? (path(CHINA_BOUNDARY) ?? '') : ''
+  const chinaTenDash = opts?.chinaBoundary ? (path(CHINA_TEN_DASH) ?? '') : ''
   // 经纬网间隔（spec/09 §3.1）：区域图 10° 细网（中国全图惯例）；世界全图 30°（挂图惯例，缩略图下清晰）；
   // 方位类全球图 15°（极区/半球图的经纬圈更密，30° 只剩两三圈）；墨卡托等跨 360° 的展示带同样取 30°。
   // 判断依据是成图范围本身（isWorldExtent），而非是否裁剪——推荐方案预览不裁剪，中国范围也应是 10° 网
@@ -350,7 +374,7 @@ export function buildPreviewLayers(
       if (d) tissot.push(d)
     }
   }
-  return { sphere, land, grat, extentD, tissot, markerPt }
+  return { sphere, land, grat, extentD, tissot, markerPt, chinaBoundary, chinaTenDash }
 }
 
 /** 预览图层样式（spec/07 §2.5 陆地填充教学风格；spec/09 §3.1 经纬网加深标清）：组件内联绑定使用，导出的独立 SVG 因此样式自包含 */

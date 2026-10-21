@@ -24,6 +24,8 @@ import ZoomableMap from '@/components/ZoomableMap.vue'
 // 两个模块 = 同 18 种投影分别在「中国全图」与「世界全图」两种成图区域上的渲染（spec/09 §2）
 const WORLD: RegionExtent = { minLon: -180, minLat: -90, maxLon: 180, maxLat: 90 }
 const CHINA: RegionExtent = REGION_PRESETS.find((p) => p.id === 'china')!.extent
+/** 中国模块成图范围：国界数据南端到 3.4°N（十段线最南段），较预设四至略向南扩，保证国界图层完整（spec/09 §2.5） */
+const CHINA_MAP: RegionExtent = { ...CHINA, minLat: 3.2 }
 const W = 280
 const H = 180
 
@@ -35,7 +37,7 @@ interface RegionGroupDef {
   clip: boolean
 }
 const REGION_GROUPS: RegionGroupDef[] = [
-  { key: 'china', title: '中国地图投影', extent: CHINA, clip: true },
+  { key: 'china', title: '中国地图投影', extent: CHINA_MAP, clip: true },
   { key: 'world', title: '世界地图投影', extent: WORLD, clip: false },
 ]
 
@@ -116,6 +118,10 @@ interface Card {
   sphere: string
   land: string
   grat: string
+  /** 中国国界轮廓（仅中国模块，spec/09 §2.5） */
+  chinaBoundary: string
+  /** 南海诸岛十段线（仅中国模块，spec/09 §2.5） */
+  chinaTenDash: string
   /** 经纬网经纬度标注（spec/09 §3.1，随图面缩放） */
   gratLabels: GratLabel[]
   /** 投影中心处米/像素（缩放级别 1），比例尺换算用（spec/09 §3.3） */
@@ -140,6 +146,7 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
   // 坐标模式下传入中心点，图面上以圆点标出（spec/07 §2.5）
   const layers = buildPreviewLayers(info, extent, W, H, coordValid.value ? [coord.lon, coord.lat] : undefined, {
     clipToExtent: clip,
+    chinaBoundary: def.key === 'china',
   })
   const deco = buildPreviewDecorations(info, extent, W, H, { clipToExtent: clip })
   const card: Card = {
@@ -148,6 +155,8 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
     sphere: layers.sphere,
     land: layers.land,
     grat: layers.grat,
+    chinaBoundary: layers.chinaBoundary,
+    chinaTenDash: layers.chinaTenDash,
     gratLabels: deco.gratLabels,
     mmp: deco.metersPerPixel,
     // 坐标模式下叠加范围框与 Tissot，直观呈现该位置的变形
@@ -195,13 +204,12 @@ function scaleBar(mmp: number, zoom: number): { km: number; px: number } {
   return best ?? { km: SCALE_KM[0], px: ((SCALE_KM[0] * 1000) / mmp) * zoom }
 }
 
-/** 图例行（spec/09 §3.4）：常驻陆地/经纬网，按坐标查看时追加制图范围/变形椭圆/标记点 */
-type LegendRow = { kind: 'land' | 'grat' | 'extent' | 'tissot' | 'marker'; text: string }
+/** 图例行（spec/09 §3.4）：常驻陆地/经纬网，中国模块加国界，按坐标查看时追加制图范围/变形椭圆/标记点 */
+type LegendRow = { kind: 'land' | 'border' | 'grat' | 'extent' | 'tissot' | 'marker'; text: string }
 const legendRows = computed<LegendRow[]>(() => {
-  const rows: LegendRow[] = [
-    { kind: 'land', text: '陆地' },
-    { kind: 'grat', text: '经纬网' },
-  ]
+  const rows: LegendRow[] = [{ kind: 'land', text: '陆地' }]
+  if (moduleView.value === 'china') rows.push({ kind: 'border', text: '国界·十段线' })
+  rows.push({ kind: 'grat', text: '经纬网' })
   if (coordValid.value) {
     rows.push({ kind: 'extent', text: '制图范围' }, { kind: 'tissot', text: '变形椭圆' }, { kind: 'marker', text: '标记点' })
   }
@@ -267,6 +275,9 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
         >
           <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
           <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
+          <!-- 中国国界图层（spec/09 §2.5）：国界轮廓 + 南海诸岛十段线，仅中国模块 -->
+          <path v-if="c.chinaBoundary" :d="c.chinaBoundary" class="china-border" />
+          <path v-if="c.chinaTenDash" :d="c.chinaTenDash" class="china-nine-dash" />
           <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
           <!-- 经纬网标注（spec/09 §3.1）：随图面缩放的地图内容 -->
           <text
@@ -312,6 +323,7 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
               <text x="4" y="7.5" class="lg-title">图例</text>
               <g v-for="(r, i) in legendRows" :key="r.kind" :transform="`translate(0 ${11 + i * 8.5})`">
                 <rect v-if="r.kind === 'land'" x="4" y="1.5" width="8" height="5" class="lg-land" />
+                <line v-else-if="r.kind === 'border'" x1="4" y1="4" x2="12" y2="4" class="lg-border" />
                 <line v-else-if="r.kind === 'grat'" x1="4" y1="4" x2="12" y2="4" class="lg-grat" />
                 <rect v-else-if="r.kind === 'extent'" x="4" y="1.5" width="8" height="5" class="lg-extent" />
                 <circle v-else-if="r.kind === 'tissot'" cx="8" cy="4" r="2.6" class="lg-tissot" />
@@ -471,6 +483,14 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
 }
 
 /* 图面整饰样式（spec/09 §3） */
+.china-border {
+  fill: rgba(59, 162, 114, 0.14);
+  stroke: #2e7d52;
+  stroke-width: 0.9;
+}
+.china-nine-dash {
+  fill: #2e7d52;
+}
 .grat-label {
   font-size: 5px;
   fill: #4e7a5c;
@@ -528,10 +548,14 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   stroke: #b9cfb2;
   stroke-width: 0.6;
 }
+.lg-border {
+  stroke: #2e7d52;
+  stroke-width: 1.2;
+}
 .lg-grat {
-  stroke: #a9c8b0;
+  stroke: #8bab98;
   stroke-width: 0.9;
-  stroke-dasharray: 2 2;
+  stroke-dasharray: 2.5 2.5;
 }
 .lg-extent {
   fill: rgba(59, 162, 114, 0.12);
