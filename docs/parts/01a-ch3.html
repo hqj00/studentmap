@@ -1,0 +1,135 @@
+    <h2 id="s3">3. 投影推荐：从区域到候选集</h2>
+
+    <h3 id="s3-1">3.1 输入模型与校验</h3>
+    <p>推荐接口只接受两个字段：区域与用途。区域二选一——预设 id，或经纬度包围盒；用途是七个枚举值之一。</p>
+
+    <pre><code>type RegionInput =
+  | { kind: 'extent'; extent: RegionExtent }
+  | { kind: 'preset'; presetId: string }
+
+interface RegionExtent {
+  minLon: number; minLat: number
+  maxLon: number; maxLat: number
+}
+
+type MapPurpose =
+  | 'general' | 'navigation' | 'statistic' | 'education'
+  | 'topographic' | 'meteorology' | 'polar'</code></pre>
+
+    <p>表单校验在提交前完成，规则是：四个数值必须有限；经度在 <span class="imath" data-tex="[-180^\circ,180^\circ]"></span>，纬度在 <span class="imath" data-tex="[-90^\circ,90^\circ]"></span>；<span class="imath" data-tex="\lambda_{\min}&lt;\lambda_{\max}"></span> 且 <span class="imath" data-tex="\varphi_{\min}&lt;\varphi_{\max}"></span>。预设区域共 8 个，按四组组织：</p>
+
+    <table>
+      <caption>表 5 · 预设区域与四至</caption>
+      <thead><tr><th>分组</th><th>预设</th><th>minLon / minLat / maxLon / maxLat</th><th>取值依据</th></tr></thead>
+      <tbody>
+        <tr><td>全球</td><td>世界全图</td><td>−180 / −90 / 180 / 90</td><td>全球四至</td></tr>
+        <tr><td>中国</td><td>中国全图（含南海诸岛）</td><td>73.5 / 3.8 / 135.1 / 53.6</td><td>帕米尔高原—黑乌汇合处、曾母暗沙—漠河</td></tr>
+        <tr><td>中国</td><td>北京市</td><td>115.4 / 39.5 / 117.5 / 41.1</td><td>市域四至</td></tr>
+        <tr><td>中国</td><td>青藏高原</td><td>73.3 / 26.0 / 104.8 / 39.8</td><td>高原主体范围</td></tr>
+        <tr><td>大洲与典型区域</td><td>欧洲</td><td>−9.5 / 36.0 / 66.0 / 71.0</td><td>爱尔兰西—乌拉尔、地中海—北角</td></tr>
+        <tr><td>大洲与典型区域</td><td>智利</td><td>−75.6 / −56.0 / −66.0 / −17.5</td><td>南北狭长国家典型</td></tr>
+        <tr><td>极地</td><td>北极地区</td><td>−180 / 66.5 / 180 / 90</td><td>北极圈以北</td></tr>
+        <tr><td>极地</td><td>南极地区</td><td>−180 / −90 / 180 / −66.5</td><td>南极圈以南</td></tr>
+      </tbody>
+    </table>
+
+    <p>页面还提供等距圆柱小地图拖拽框选：松手后把屏幕点反算为经纬度，保留 0.1°，夹取到合法范围，自动切到“自定义经纬度”。框选逻辑见 §10.2。</p>
+
+    <h3 id="s3-2">3.2 范围特征提取</h3>
+    <p>规则引擎不直接读四至，而是先提取五个特征：中心经纬度、两个跨度、形状比、世界 / 中国判定。</p>
+
+    <div class="formula" data-tex="\lambda_c=\frac{\lambda_{\min}+\lambda_{\max}}{2},\qquad \varphi_c=\frac{\varphi_{\min}+\varphi_{\max}}{2}" data-no="1"></div>
+
+    <div class="formula" data-tex="\Delta\lambda=\lambda_{\max}-\lambda_{\min},\qquad \Delta\varphi=\varphi_{\max}-\varphi_{\min}" data-no="2"></div>
+
+    <div class="formula" data-tex="r=\frac{\Delta\lambda\,\cos\varphi_c}{\Delta\varphi}\qquad(\Delta\varphi=0\ \Rightarrow\ r=\infty)" data-no="3"></div>
+
+    <p><span class="imath" data-tex="r"></span> 是东西向与南北向的“等距圆柱意义”宽度比，量纲相互抵消。<span class="imath" data-tex="r&lt;0.6"></span> 判为南北狭长；智利预设的 <span class="imath" data-tex="r\approx0.20"></span>，中国全图约 <span class="imath" data-tex="1.09"></span>，世界全图为 <span class="imath" data-tex="2.00"></span>。</p>
+
+    <div class="formula" data-tex="\begin{aligned}\text{world}:&amp;\quad \Delta\lambda\ge330^\circ\ \land\ \Delta\varphi\ge100^\circ\\ \text{China}:&amp;\quad \lambda_{\min}\le75^\circ\ \land\ \lambda_{\max}\ge133^\circ\ \land\ \varphi_{\min}\le20^\circ\ \land\ \varphi_{\max}\ge52^\circ\end{aligned}" data-no="4"></div>
+
+    <p>世界判定加了纬度跨度门槛，是为了避免把环极的北极 / 南极地区（经度跨 360°、纬度只跨 23.5°）误判为世界全图。中国判定比中国预设更宽：用户手画一个略小于国界的范围，仍应命中“中国全图惯例”。</p>
+
+    <h3 id="s3-3">3.3 规则引擎的三层判定</h3>
+    <p>规则按“特殊场景 → 用途硬规则 → 纬度带 × 变形性质”的顺序拼接。这个顺序只影响<strong>同置信度时的理由取舍</strong>，不影响最终排序；排序统一由置信度决定。</p>
+
+    <table>
+      <caption>表 6 · 第一优先级：用途硬规则</caption>
+      <thead><tr><th>用途</th><th>条件</th><th>推荐</th><th>置信度</th></tr></thead>
+      <tbody>
+        <tr><td>航海 / 航空导航 <code>navigation</code></td><td><span class="imath" data-tex="|\varphi_c|\le60^\circ"></span></td><td>墨卡托（等角航线为直线）</td><td>0.90</td></tr>
+        <tr><td>航海 / 航空导航</td><td><span class="imath" data-tex="|\varphi_c|&gt;60^\circ"></span></td><td>极地立体（等角）</td><td>0.90</td></tr>
+        <tr><td>大比例尺地形图 <code>topographic</code></td><td>任意</td><td>横轴墨卡托 / 高斯-克吕格（6° 或 3° 分带）</td><td>0.90</td></tr>
+        <tr><td>气象图 <code>meteorology</code></td><td>任意</td><td>兰伯特等角圆锥（保锋面形态）</td><td>0.90</td></tr>
+        <tr><td>极地制图 <code>polar</code></td><td>任意</td><td>极地立体；备选方位等距</td><td>0.90 / 0.80</td></tr>
+      </tbody>
+    </table>
+
+    <table>
+      <caption>表 7 · 第二优先级：纬度带 × 变形性质</caption>
+      <thead><tr><th>中心纬度</th><th>统计制图（面积敏感）</th><th>其他用途</th><th>置信度</th></tr></thead>
+      <tbody>
+        <tr><td><span class="imath" data-tex="|\varphi_c|&gt;60^\circ"></span> 高纬 / 极地</td><td>兰伯特方位等积</td><td>极地立体</td><td>0.75</td></tr>
+        <tr><td><span class="imath" data-tex="25^\circ\le|\varphi_c|\le60^\circ"></span> 中纬</td><td>阿尔伯斯等积圆锥</td><td>兰伯特等角圆锥</td><td>0.75</td></tr>
+        <tr><td><span class="imath" data-tex="|\varphi_c|&lt;25^\circ"></span> 低纬 / 赤道</td><td>高尔-彼得斯</td><td>墨卡托；备选等距圆柱</td><td>0.75 / 0.65</td></tr>
+      </tbody>
+    </table>
+
+    <table>
+      <caption>表 8 · 第三优先级：特殊场景</caption>
+      <thead><tr><th>条件</th><th>推荐</th><th>置信度</th></tr></thead>
+      <tbody>
+        <tr><td>命中中国范围，且用途为统计或普通参考</td><td>阿尔伯斯等积圆锥（105°E / 25°N / 47°N）</td><td>0.90</td></tr>
+        <tr><td>世界全图，且用途为教学或普通参考</td><td>罗宾逊（0.85）；温克尔三重（0.80）</td><td>0.85 / 0.80</td></tr>
+        <tr><td>世界全图，且用途为统计</td><td>摩尔魏特（全球等积）</td><td>0.85</td></tr>
+        <tr><td><span class="imath" data-tex="r&lt;0.6"></span> 南北狭长，且用途不是统计</td><td>横轴墨卡托</td><td>0.80</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s3-4">3.4 置信度合并与排序</h3>
+    <p>同一投影可能被多条规则命中（例如“中国 + 统计”会同时命中特殊规则与中纬统计规则）。合并规则是<strong>按 id 取最高置信度</strong>，理由保留最先出现且置信度最高的一条；然后按置信度降序取前 4 条。</p>
+
+    <div class="formula" data-tex="C(\mathrm{id})=\max\{\,c_h \mid h.\mathrm{id}=\mathrm{id}\,\},\qquad R=\operatorname*{sort}_{C\downarrow}\bigl(\{(\mathrm{id},C(\mathrm{id}))\}\bigr)_{1..4}" data-no="5"></div>
+
+    <pre><code>const byId = new Map&lt;string, RuleHit&gt;()
+for (const hit of hits) {
+  const prev = byId.get(hit.id)
+  if (!prev || hit.confidence &gt; prev.confidence) byId.set(hit.id, hit)
+}
+return [...byId.values()]
+  .sort((a, b) =&gt; b.confidence - a.confidence)
+  .slice(0, 4)
+  .flatMap((hit) =&gt; {
+    const projection = findProjection(hit.id)
+    return projection ? [{ projection, reason: hit.reason,
+      source: 'rule' as const, confidence: hit.confidence }] : []
+  })</code></pre>
+
+    <p>知识库中不存在的 id 在最后一步被丢弃，因此规则表里写错一个 id 不会让页面崩溃，只会少一条候选。</p>
+
+    <h3 id="s3-5">3.5 完整算例：中国全图 + 统计专题</h3>
+    <p>取中国预设四至，逐项计算：</p>
+    <table>
+      <caption>表 9 · 中国全图 + 统计专题的特征与命中</caption>
+      <thead><tr><th>量</th><th>计算</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>中心经度 <span class="imath" data-tex="\lambda_c"></span></td><td>(73.5 + 135.1) / 2</td><td>104.3°E</td></tr>
+        <tr><td>中心纬度 <span class="imath" data-tex="\varphi_c"></span></td><td>(3.8 + 53.6) / 2</td><td>28.7°N</td></tr>
+        <tr><td>经度跨度 <span class="imath" data-tex="\Delta\lambda"></span></td><td>135.1 − 73.5</td><td>61.6°</td></tr>
+        <tr><td>纬度跨度 <span class="imath" data-tex="\Delta\varphi"></span></td><td>53.6 − 3.8</td><td>49.8°</td></tr>
+        <tr><td>形状比 <span class="imath" data-tex="r"></span></td><td>61.6 × cos 28.7° / 49.8</td><td>1.085</td></tr>
+        <tr><td>世界 / 中国判定</td><td>跨度不足 330°；四至覆盖中国</td><td>China = true，World = false</td></tr>
+        <tr><td>命中规则</td><td>特殊规则（0.90）+ 中纬统计（0.75），同一 id</td><td>阿尔伯斯 0.90</td></tr>
+        <tr><td>输出</td><td>候选 1 条</td><td>阿尔伯斯等积圆锥</td></tr>
+      </tbody>
+    </table>
+
+    <p>这正是离线验收脚本用例 1 的结果：主推荐阿尔伯斯，参数 105°E / 25°N / 47°N。候选只有一条不是缺陷——两条规则指向同一投影，合并后自然只剩一条；页面会只显示方案 A，不生成“为什么优先 A”的对比结论。</p>
+
+    <h3 id="s3-6">3.6 规则引擎的边界</h3>
+    <ul>
+      <li><strong>不新增规则</strong>：知识库从 12 条扩到 18 条时，规则引擎没有增加任何新规则；新增 6 条只服务总览与 AI 候选，避免“总览变多、推荐变味”。</li>
+      <li><strong>不按投影面类别硬筛</strong>：规则只看纬度带、用途、形状，不因为“中国在中纬”就排除圆柱投影；是否合适由理由与优缺点说明。</li>
+      <li><strong>不保证唯一正确答案</strong>：规则输出是教学建议，不是测绘生产结论；中国全图惯例参数是公开出版地图的常见做法，不替代法定标准。</li>
+      <li><strong>AI 参数尚未接入有效参数</strong>：AI 返回的 <code>params</code> 会合并进知识库条目的 <code>typicalParams</code>，但预览 / 导出使用的 <code>effectiveParams</code> 仍从区域推导。这是已知限制，见 §14.4；它不影响推荐排序与理由。</li>
+    </ul>

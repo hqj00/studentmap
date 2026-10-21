@@ -1,0 +1,191 @@
+:root {
+  --ink: #203b49;
+  --muted: #6b808a;
+  --teal: #167d78;
+  --line: #dde5e8;
+  --formula-bg: #f8fbfb;
+  --formula-line: #8bb7ae;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 30px; }
+body {
+  margin: 0;
+  background: #f2f5f6;
+  color: var(--ink);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.95;
+}
+.doc-top {
+  background: #173e50;
+  color: #fff;
+  padding: 20px 38px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+.doc-top strong { font-size: 18px; letter-spacing: 1px; }
+.doc-top span { font-size: 11px; color: #c1d2d9; display: block; margin-top: 3px; }
+.doc-layout {
+  display: grid;
+  grid-template-columns: 265px minmax(0, 1000px);
+  max-width: 1350px;
+  margin: auto;
+  gap: 28px;
+  padding: 28px 22px;
+}
+.toc {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  max-height: 94vh;
+  overflow: auto;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 12px;
+}
+.toc b { display: block; margin: 0 10px 12px; font-size: 12px; letter-spacing: 1px; }
+.toc a {
+  display: block;
+  font-size: 11px;
+  line-height: 1.65;
+  padding: 5px 10px;
+  color: #5d7783;
+  text-decoration: none;
+  border-radius: 4px;
+}
+.toc .level-2 { font-weight: 650; background: #f1f6f5; margin-top: 5px; }
+.toc .level-3 { padding-left: 19px; }
+.toc a:hover { color: var(--teal); background: #edf5f3; }
+main {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 36px 44px;
+  min-width: 0;
+}
+h1 { font-size: 27px; line-height: 1.5; margin: 0 0 20px; }
+h2 {
+  font-size: 22px;
+  color: #204f61;
+  border-bottom: 2px solid #dce8e8;
+  padding-bottom: 9px;
+  margin: 40px 0 18px;
+}
+h3 { font-size: 18px; margin: 33px 0 13px; color: #1e6b69; }
+p { margin: 13px 0; }
+a { color: var(--teal); overflow-wrap: anywhere; }
+ul, ol { padding-left: 24px; }
+li { margin: 4px 0; }
+code {
+  background: #eff4f5;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+pre {
+  overflow: auto;
+  border: 1px solid #e3eaec;
+  border-radius: 5px;
+  padding: 14px;
+  background: #f7f9fa;
+  font-size: 12px;
+  line-height: 1.8;
+}
+pre code { padding: 0; background: transparent; white-space: pre; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.75;
+  margin: 18px 0;
+}
+caption {
+  caption-side: top;
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 0 6px;
+}
+th, td {
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+th { background: #edf4f3; font-weight: 600; }
+.formula {
+  background: var(--formula-bg);
+  border: 1px solid #e3ebec;
+  border-left: 3px solid var(--formula-line);
+  border-radius: 5px;
+  padding: 19px 30px 19px 14px;
+  margin: 18px 0;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.formula .katex-display { margin: .4em 0; text-align: left; }
+.formula .katex-display > .katex { display: inline-block; min-width: 100%; text-align: center; }
+.formula .katex { font-size: 1.12em; }
+.formula-number {
+  display: block;
+  text-align: right;
+  font-size: 10px;
+  color: #8ca1a6;
+  margin-top: 5px;
+}
+.imath .katex { font-size: 1.02em; }
+.math-note { color: var(--muted); font-size: 12px; }
+.refs li { margin: 7px 0; }
+.doc-footer {
+  margin-top: 40px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  color: #8499a2;
+}
+.doc-footer p { margin: 6px 0; }
+.doc-tools { display: flex; gap: 15px; font-size: 11px; }
+.doc-tools a { color: #d5e4e8; text-decoration: none; }
+.doc-tools a:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .doc-layout { display: block; padding: 14px; }
+  .toc { position: relative; max-height: 260px; margin-bottom: 15px; }
+  main { padding: 24px 20px; overflow-x: auto; }
+  .doc-top { padding: 16px 20px; flex-wrap: wrap; }
+  h1 { font-size: 23px; overflow-wrap: anywhere; }
+  h2 { font-size: 20px; overflow-wrap: anywhere; }
+  h3 { font-size: 17px; overflow-wrap: anywhere; }
+  p, li { overflow-wrap: anywhere; }
+  table { table-layout: fixed; }
+  th, td { word-break: break-word; }
+  td code, p code { word-break: break-all; }
+  pre { max-width: 100%; }
+  .formula { padding: 14px 10px; max-width: 100%; }
+  .formula .katex { font-size: 1.02em; }
+  .doc-top span { display: none; }
+}
+@media print {
+  body { background: #fff; font-size: 10pt; line-height: 1.7; }
+  .doc-top, .toc, .doc-tools { display: none; }
+  .doc-layout { display: block; padding: 0; max-width: none; }
+  main { padding: 0; border: 0; }
+  h1 { font-size: 20pt; }
+  h2 { font-size: 16pt; break-after: avoid; }
+  h3 { font-size: 13pt; break-after: avoid; }
+  .formula { break-inside: avoid; background: #fff; padding: 12px 10px; }
+  .formula .katex { font-size: 1em; }
+  table { font-size: 9pt; }
+  tr { break-inside: avoid; }
+  .formula-number { font-size: 8pt; }
+  a { color: inherit; }
+  a[href]::after { content: none; }
+  @page { size: A4; margin: 17mm 15mm; }
+}

@@ -1,0 +1,200 @@
+    <h2 id="s5">5. 投影预览与图面整饰</h2>
+
+    <h3 id="s5-1">5.1 d3 投影工厂</h3>
+    <p><code>createProjection()</code> 把知识库 id 映射为 d3 投影实例。能用 d3-geo 的直接用；罗宾逊、温克尔三重、摩尔魏特、正弦、多圆锥、圆柱等积来自 <code>d3-geo-projection</code>。</p>
+
+    <table>
+      <caption>表 13 · id 与 d3 构造函数</caption>
+      <thead><tr><th>知识库 id</th><th>d3 构造函数</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td><code>mercator</code></td><td><code>geoMercator()</code></td><td>须先清除默认 clipExtent，否则 fitExtent 包围盒算错</td></tr>
+        <tr><td><code>transverse-mercator</code></td><td><code>geoTransverseMercator()</code></td><td>必须用 rotate 定向</td></tr>
+        <tr><td><code>lambert-conformal-conic</code></td><td><code>geoConicConformal()</code></td><td>双标准纬线 [30, 60] 兜底</td></tr>
+        <tr><td><code>albers-equal-area-conic</code></td><td><code>geoConicEqualArea()</code></td><td>双标准纬线 [25, 47] 兜底</td></tr>
+        <tr><td><code>azimuthal-equidistant</code></td><td><code>geoAzimuthalEquidistant()</code></td><td>视点对准区域中心</td></tr>
+        <tr><td><code>polar-stereographic</code></td><td><code>geoStereographic()</code></td><td>原点纬度取 ±90°</td></tr>
+        <tr><td><code>lambert-azimuthal-equal-area</code></td><td><code>geoAzimuthalEqualArea()</code></td><td>—</td></tr>
+        <tr><td><code>equidistant-cylindrical</code></td><td><code>geoEquirectangular()</code></td><td>默认分支</td></tr>
+        <tr><td><code>gall-peters</code></td><td><code>geoCylindricalEqualArea()</code></td><td>标准纬线固定 45°</td></tr>
+        <tr><td><code>robinson</code></td><td><code>geoRobinson()</code></td><td>d3-geo-projection</td></tr>
+        <tr><td><code>winkel-tripel</code></td><td><code>geoWinkel3()</code></td><td>无闭式反算；proj4js 试算返回 null</td></tr>
+        <tr><td><code>mollweide</code></td><td><code>geoMollweide()</code></td><td>—</td></tr>
+        <tr><td><code>sinusoidal</code></td><td><code>geoSinusoidal()</code></td><td>—</td></tr>
+        <tr><td><code>polyconic</code></td><td><code>geoPolyconic()</code></td><td>—</td></tr>
+        <tr><td><code>orthographic</code></td><td><code>geoOrthographic()</code></td><td>只显示半球</td></tr>
+        <tr><td><code>gnomonic</code></td><td><code>geoGnomonic()</code></td><td>d3 默认裁到中心 60°</td></tr>
+        <tr><td><code>natural-earth</code></td><td><code>geoNaturalEarth1()</code></td><td>—</td></tr>
+        <tr><td><code>equal-earth</code></td><td><code>geoEqualEarth()</code></td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s5-2">5.2 定向：rotate 与 center 的分工</h3>
+    <pre><code>if (info.category === 'azimuthal') {
+  proj.rotate([-cm, -originLat])
+} else {
+  proj.rotate([-cm, 0]).center([0, originLat])
+}</code></pre>
+
+    <p>方位投影把视点对准区域中心：<code>rotate</code> 同时旋转经度和纬度。其余投影只旋转经度，再用 <code>center</code> 把原点纬度平移到画幅中心。</p>
+    <p>横轴墨卡托是一个必须单独说明的坑：它不能靠 <code>center</code> 平移来对准中央经线，否则会把距中央经线 90° 的奇异区拉进画幅。代码统一走 <code>rotate([-cm, 0])</code>，让中央经线成为图幅中央。</p>
+
+    <h3 id="s5-3">5.3 fitExtent：把投影装进画幅</h3>
+    <p>投影实例化后，用 <code>fitExtent</code> 把目标（球面、区域外框或教学展示带）装进 <code>[6,6]</code> 到 <code>[W-6,H-6]</code> 的包围盒。设目标投影后的包围盒为 <span class="imath" data-tex="[x_{\min},x_{\max}]\times[y_{\min},y_{\max}]"></span>，画幅为 <span class="imath" data-tex="W\times H"></span>，边距 <span class="imath" data-tex="m=6"></span>：</p>
+
+    <div class="formula" data-tex="s=\min\left\{\frac{W-2m}{x_{\max}-x_{\min}},\ \frac{H-2m}{y_{\max}-y_{\min}}\right\}" data-no="10"></div>
+
+    <div class="formula" data-tex="\begin{aligned}x_{\mathrm{screen}}&amp;=\frac{W-s\,(x_{\max}-x_{\min})}{2}+s\,(x_p-x_{\min})\\ y_{\mathrm{screen}}&amp;=\frac{H-s\,(y_{\max}-y_{\min})}{2}+s\,(y_p-y_{\min})\end{aligned}" data-no="11"></div>
+
+    <p>d3 的平面坐标已经是屏幕方向（y 向下增大），因此不需要再做一次翻转。<code>fitExtent</code> 内部完成的就是式 (10)(11) 的仿射拟合；本文把它写出来，是为了解释“为什么同一区域在不同画幅里比例尺不同、但形状不变”。</p>
+    <p>墨卡托有一个额外步骤：它自带按默认 scale / translate 定义的 <code>clipExtent</code>，不先 <code>clipExtent(null)</code>，<code>fitExtent</code> 会把裁剪框当成图形边界，导致图缩到角落或整片空白。这是 2026-10-20 实测修复过的问题。</p>
+
+    <h3 id="s5-4">5.4 世界视图的教学展示带</h3>
+    <p>有些投影无法在一幅图里展示完整球面：圆锥投影的两极发散成无穷扇形，墨卡托把极点映射到无穷远，横轴墨卡托在离中央经线 90° 处奇异。世界视图下，这些投影退化为“教学展示带”，而不是硬画全球。</p>
+
+    <table>
+      <caption>表 14 · 世界视图的展示带退化规则</caption>
+      <thead><tr><th>投影</th><th>展示范围</th><th>参数</th><th>卡片副标题</th></tr></thead>
+      <tbody>
+        <tr><td>圆锥类（LCC / Albers / 多圆锥）</td><td>40°E–150°E，5°N–65°N</td><td>中央经线 95°E；Albers 25/47，LCC 30/60</td><td>中纬带示意</td></tr>
+        <tr><td>墨卡托</td><td>−180°–180°，−85°–85°</td><td>中央经线 0°</td><td>世界全图（±85° 内）</td></tr>
+        <tr><td>横轴墨卡托 / 高斯-克吕格</td><td>40°E–150°E，5°N–65°N</td><td>中央经线 95°E</td><td>中纬带示意</td></tr>
+        <tr><td>其余</td><td>完整球面</td><td>—</td><td>世界全图</td></tr>
+      </tbody>
+    </table>
+
+    <p>展示带内的陆地与经纬网先按经纬度矩形裁剪，再投影；画幅再设 <code>clipExtent</code> 防止路径溢出卡片。球心投影只显示中心 60°、正射只显示半球，这是一览其形态的教学预期行为，不是渲染失败。</p>
+
+    <h3 id="s5-5">5.5 Sutherland–Hodgman 矩形裁剪</h3>
+    <p>展示带与“中国组”需要把陆地轮廓裁到经纬度矩形内。实现用 Sutherland–Hodgman：依次对左、右、下、上四条边裁剪，保留边内的点，边外的点与边内点之间插入交点。</p>
+
+    <p>设线段两端为 <span class="imath" data-tex="A=(x_A,y_A)"></span>、<span class="imath" data-tex="B=(x_B,y_B)"></span>，裁剪边为 <span class="imath" data-tex="x=x_e"></span>，交点参数为：</p>
+
+    <div class="formula" data-tex="t=\frac{x_e-x_A}{x_B-x_A},\qquad P=A+t\,(B-A)" data-no="12"></div>
+
+    <p>纬度边同理，把 x 换成 y。裁剪后的环若少于 4 个点就丢弃；陆地数据是 MultiPolygon，逐环处理后重新组装。一个容易踩的坑是环方向：d3 的球面多边形约定外环顺时针，方向反了会被当成“整个球面减去这个环”的补集，图上出现大片错误填充。</p>
+
+    <h3 id="s5-6">5.6 Tissot 变形椭圆</h3>
+    <p>Tissot 指示线用“球面上等半径小圆、投影后变成什么形状”直观展示局部变形。实现不是画理论椭圆，而是在区域内均匀布 4×3 个等半径小圆，交给投影去变形。经度、纬度布点分别为：</p>
+
+    <div class="formula" data-tex="\lambda_i=\lambda_{\min}+0.15\,\Delta\lambda+\frac{0.7\,\Delta\lambda\,(i+0.5)}{4},\qquad i=0,1,2,3" data-no="13"></div>
+
+    <div class="formula" data-tex="\varphi_j=\varphi_{\min}+0.15\,\Delta\varphi+\frac{0.7\,\Delta\varphi\,(j+0.5)}{3},\qquad j=0,1,2" data-no="14"></div>
+
+    <p>圆的半径按区域跨度自适应，并夹在 1.5°–6° 之间：</p>
+
+    <div class="formula" data-tex="\rho=\min\left(6,\ \max\left(1.5,\ \frac{\min(\Delta\lambda,\Delta\varphi)}{10}\right)\right)" data-no="15"></div>
+
+    <p>最多 12 个圆（落在投影裁剪区外或返回空路径的点会被省略）。椭圆越扁，角度 / 形状变形越大；面积与圆不等，面积有变形；处处仍是等大的圆则等角，处处面积相等则等积。页面只做定性展示，不计算主方向比例 <span class="imath" data-tex="a,b"></span>，也不输出面积比数值——这是教学示意，不是变形分析软件。</p>
+
+    <h3 id="s5-7">5.7 经纬网间隔与标注</h3>
+    <p>经纬网线本身用离散间隔：区域图（中国组、展示带）10°，跨 360° 的世界全图 30°，方位类全球图 15°（30° 只剩两三圈，太稀）。经纬度<strong>标注</strong>的间隔另按跨度自适应，目标是跨度内不超过 7 条：</p>
+
+    <div class="formula" data-tex="s^{*}=\min\left\{s\in\{2,5,10,15,20,30,45,60,90\}\ \middle|\ \frac{\Delta}{s}\le7\right\}" data-no="16"></div>
+
+    <p>其中 <span class="imath" data-tex="\Delta"></span> 是经度或纬度跨度；没有满足条件的步长时取 90°。标注步长与网线步长可以不同：中国全图用 10° 网线，标注也按 10° 步长；世界全图用 30° 网线，经度标注却每 60° 一条、纬度每 30° 一条，避免缩略图上挤成一团。</p>
+
+    <p>标注规则分两种：</p>
+    <ul>
+      <li><strong>世界全图</strong>：经度沿赤道每 60° 标一条（120°W 到 120°E），纬度沿中央经线每 30° 标一条，赤道不重复；方位类只标 ±60°，避免 30° 标注挤在投影中心。</li>
+      <li><strong>区域图</strong>：经度沿下边缘、纬度沿左边缘，步长由式 (16) 决定，并做 16px 最小间距过滤。</li>
+    </ul>
+
+    <p>标注会主动避让三个整饰区：左上指北针（26×26）、左下比例尺（104×22）、右下图例（74×44）。落在画幅外或避让区内的标注直接省略，不硬挤。标注字号 5px、白色描边光晕，属于地图内容，随图面缩放。</p>
+
+    <h3 id="s5-8">5.8 比例尺</h3>
+    <p>d3 的 <code>projection.scale()</code> 是“投影中心处每弧度多少像素”。因此投影中心处每像素代表的地面米数为：</p>
+
+    <div class="formula" data-tex="m_{pp}=\frac{R}{k},\qquad R=6371000\ \mathrm{m}" data-no="17"></div>
+
+    <p>比例尺条从固定候选集中选一个整千米数，使其在当前缩放倍率 <span class="imath" data-tex="z"></span> 下的像素长度最接近目标长度 <span class="imath" data-tex="L_0"></span>，且不超过上限 <span class="imath" data-tex="L_{\max}"></span>：</p>
+
+    <div class="formula" data-tex="L(\mathrm{km})=\frac{1000\,\mathrm{km}}{m_{pp}}\,z,\qquad \mathrm{km}^{*}=\arg\min_{\mathrm{km}\in K,\ L\le L_{\max}}\left|L(\mathrm{km})-L_0\right|" data-no="18"></div>
+
+    <table>
+      <caption>表 15 · 比例尺目标长度</caption>
+      <thead><tr><th>场景</th><th>候选集 K</th><th>目标 L0</th><th>上限 Lmax</th></tr></thead>
+      <tbody>
+        <tr><td>推荐方案预览（420×260）</td><td>10 / 20 / 50 / 100 / 200 / 500 / 1000 / 2000 / 5000 / 10000 / 20000 km</td><td>72 px</td><td>120 px</td></tr>
+        <tr><td>总览缩略图（280×180）</td><td>同上</td><td>52 px</td><td>92 px</td></tr>
+      </tbody>
+    </table>
+
+    <p>以中国全图阿尔伯斯为例，预览中心处 <span class="imath" data-tex="m_{pp}\approx23442\ \mathrm{m/px}"></span>，2000 km 对应约 85.3 px；总览缩略图 <span class="imath" data-tex="m_{pp}\approx34605\ \mathrm{m/px}"></span>，2000 km 对应约 57.8 px。两者都选 2000 km，符合视觉预期。</p>
+    <p>这个比例尺是<strong>投影中心处的局部近似</strong>，不是全图统一比例尺，也不是大圆距离。远离投影中心时，实际局部比例会变；页面在图上标“km”只是给教学一个尺度感，不用于量算。</p>
+
+    <h3 id="s5-9">5.9 缩放与不动点</h3>
+    <p>缩放是 SVG 视图变换，不重新计算投影。以指针位置 <span class="imath" data-tex="(m_x,m_y)"></span> 为不动点，缩放倍率从 <span class="imath" data-tex="s"></span> 变为 <span class="imath" data-tex="s'"></span>：</p>
+
+    <div class="formula" data-tex="s'=\mathrm{clamp}(s\cdot k,\ 1,\ 16),\qquad \rho=\frac{s'}{s},\qquad t_x'=m_x-(m_x-t_x)\,\rho,\qquad t_y'=m_y-(m_y-t_y)\,\rho" data-no="19"></div>
+
+    <p>滚轮每格乘 1.2，按钮每次乘 1.4，范围 1–16 倍。整饰层（指北针、比例尺、图例）渲染在缩放变换组之外，所以位置不动；比例尺长度按当前 <span class="imath" data-tex="z"></span> 重算式 (18)，在任意倍率下仍对应正确的整千米数。标记点、经纬度标注属于地图内容，随图面一起缩放。</p>
+
+    <h2 id="s6">6. 投影总览：18 × 2 = 36 幅</h2>
+
+    <h3 id="s6-1">6.1 两个模块的语义</h3>
+    <p>总览不是“把 18 种投影按适用区域分成两组”，而是<strong>同一套 18 种投影，分别在中国全图和世界全图上各画一遍</strong>。中国模块 18 幅、世界模块 18 幅，合计 36 幅；同一投影在两个模块中编号相同，方便直接对比“同一种投影在不同区域的效果差异”。</p>
+
+    <p>默认显示中国模块。模块选择框切换后，只渲染当前模块的 18 幅；组标题、计数、筛选结果同步更新。两个模块都保留类别、性质、姿态三个筛选器，以及“按坐标查看”“允许拖动”两个开关。</p>
+
+    <h3 id="s6-2">6.2 两个模块的渲染差异</h3>
+    <table>
+      <caption>表 16 · 中国组与世界组的渲染规则</caption>
+      <thead><tr><th>项</th><th>中国地图投影</th><th>世界地图投影</th></tr></thead>
+      <tbody>
+        <tr><td>成图区域</td><td>73.5°E–135.1°E / 3.8°N–53.6°N（含南海诸岛）</td><td>−180°–180° / −90°–90°</td></tr>
+        <tr><td>裁剪</td><td><code>clipToExtent: true</code>，球面 / 陆地 / 经纬网裁到中国四至</td><td>圆锥、墨卡托、横轴墨卡托用教学展示带；其余完整球面</td></tr>
+        <tr><td>范围绿框</td><td>不画（整幅即制图区域）</td><td>不画</td></tr>
+        <tr><td>参数</td><td>阿尔伯斯命中 105°E / 25°N / 47°N；高斯-克吕格取 105°E 带</td><td>展示带用标称参数（中央经线 95°E 等）</td></tr>
+        <tr><td>中国适用性徽标</td><td>显示</td><td>不显示</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s6-3">6.3 摆放姿态：正轴 / 横轴 / 斜轴</h3>
+    <p>姿态按该幅图的<strong>实际定向</strong>逐幅判定，同一投影在两个模块可能不同。方位投影看投影中心纬度；横轴墨卡托固定横轴；其余类别为正轴。</p>
+
+    <div class="formula" data-tex="\mathrm{aspect}=\begin{cases}\text{正轴},&amp;|\varphi_0|\ge60^\circ\\ \text{横轴},&amp;|\varphi_0|\le20^\circ\\ \text{斜轴},&amp;\text{otherwise}\end{cases}\qquad(\text{仅方位类})" data-no="20"></div>
+
+    <p>横轴墨卡托 / 高斯-克吕格始终记横轴；圆柱、圆锥、伪圆柱、折中类记正轴。于是中国模块中以中国中心（约 35°N）定向的 4 个方位投影是斜轴，世界模块中中心在赤道、记横轴；世界模块筛“斜轴”会得到空态，中国模块筛“斜轴”得到 4 幅——这正是验收用例 4 的预期。</p>
+
+    <h3 id="s6-4">6.4 中国全图适用性三级标注</h3>
+    <p>中国模块的每张卡片带一枚徽标和一行原因，判定口径是“整幅中国全图成图”，不是“分带大比例尺地形图”。</p>
+
+    <table>
+      <caption>表 17 · 18 种投影的中国全图适用性</caption>
+      <thead><tr><th>投影</th><th>级别</th><th>原因（摘要）</th></tr></thead>
+      <tbody>
+        <tr><td>阿尔伯斯等积圆锥</td><td>适合</td><td>中国全图惯例（105°E，25°N/47°N），面积严格相等，统计专题首选</td></tr>
+        <tr><td>兰伯特等角圆锥</td><td>适合</td><td>我国 1:100 万地形图与气象图常用，等角保形，轮廓匹配</td></tr>
+        <tr><td>横轴墨卡托 / 高斯-克吕格</td><td>有条件</td><td>单带内变形极小，但中国东西跨约 60°，只用于 6°/3° 分带大比例尺地形图</td></tr>
+        <tr><td>多圆锥</td><td>有条件</td><td>国际 1:100 万地图旧方案，中央经线附近变形小、两侧增大；我国已改用兰伯特</td></tr>
+        <tr><td>墨卡托</td><td>不适合</td><td>高纬面积急剧放大，中国南北跨约 50° 纬度，北部失真显著</td></tr>
+        <tr><td>方位等距</td><td>不适合</td><td>适合圆形区域；中国轮廓东西南北跨度大，边缘变形随中心距增大</td></tr>
+        <tr><td>极地立体</td><td>不适合</td><td>以极点为中心，中国位于中低纬，只能压在图像边缘且变形极大</td></tr>
+        <tr><td>兰伯特方位等积</td><td>不适合</td><td>适合大洲与极地等积专题；中国为非圆形区域，边缘角度变形大</td></tr>
+        <tr><td>等距圆柱</td><td>不适合</td><td>经纬网为方格，无等角等积性质，仅作教学演示</td></tr>
+        <tr><td>高尔-彼得斯</td><td>不适合</td><td>等积但低纬形状强烈拉伸，视觉失真大</td></tr>
+        <tr><td>罗宾逊</td><td>不适合</td><td>为世界全图设计的折中投影；中国区域有更合适的圆锥投影</td></tr>
+        <tr><td>温克尔三重</td><td>不适合</td><td>世界全图折中投影，中国区域制图不采用</td></tr>
+        <tr><td>摩尔魏特</td><td>不适合</td><td>全球等积伪圆柱，高纬与图幅边缘形状失真大</td></tr>
+        <tr><td>正弦曲线</td><td>不适合</td><td>低纬无变形、高纬剪切失真大，中国中高纬区域不适用</td></tr>
+        <tr><td>正射方位</td><td>不适合</td><td>只显示半个地球、边缘强烈压缩，用于“从太空看地球”演示</td></tr>
+        <tr><td>球心</td><td>不适合</td><td>只能显示小于半球的范围，远离中心变形急剧增大</td></tr>
+        <tr><td>自然地球</td><td>不适合</td><td>为小比例尺世界地图设计，全球变形均衡</td></tr>
+        <tr><td>等地球</td><td>不适合</td><td>全球等积设计，用于世界专题图</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s6-5">6.5 按坐标查看</h3>
+    <p>勾选“按坐标查看”并输入中心经纬度后，两个模块统一改为以该点为中心的制图范围，保留绿框、Tissot 与规则结论。</p>
+
+    <div class="formula" data-tex="\begin{aligned}\lambda_{\min}&amp;=\max(-180^\circ,\ \lambda-55^\circ),&amp;\lambda_{\max}&amp;=\min(180^\circ,\ \lambda+55^\circ)\\ \varphi_{\min}&amp;=\max(-90^\circ,\ \varphi-35^\circ),&amp;\varphi_{\max}&amp;=\min(90^\circ,\ \varphi+35^\circ)\end{aligned}" data-no="21"></div>
+
+    <p>每幅图给出纬度带规则结论，口径与推荐引擎完全一致：</p>
+
+    <div class="formula" data-tex="\text{宜用}=\begin{cases}\text{方位类},&amp;|\varphi|&gt;60^\circ\\ \text{圆锥类},&amp;25^\circ\le|\varphi|\le60^\circ\\ \text{圆柱类},&amp;|\varphi|&lt;25^\circ\end{cases}" data-no="22"></div>
+
+    <p>命中记 ✓ 并说明“宜用哪一类”；未命中记 ✗ 并说明“本幅为哪一类”。高斯-克吕格 / 横轴墨卡托额外给出该经度所在的 6° 带号与带中央经线，例如 105°E 属第 18 带、中央经线 105°E；郑州 113.6°E 属第 19 带、中央经线 111°E。</p>
+
+    <h3 id="s6-6">6.6 筛选组合与空态</h3>
+    <p>类别（圆柱 / 圆锥 / 方位 / 伪圆柱 / 折中）、性质（等角 / 等积 / 等距 / 折中）、姿态（正轴 / 横轴 / 斜轴）三个筛选器可组合使用，结果为交集。计数显示“符合筛选：N / 18”；交集为空时显示空态提示，不渲染空白网格。</p>
+    <p>按坐标查看时，筛选仍作用于当前模块；但成图范围统一替换为式 (21) 的坐标范围，因此“中国组”的裁剪与“世界组”的展示带在这一模式下都让位于坐标范围。</p>

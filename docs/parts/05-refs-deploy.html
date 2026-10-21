@@ -1,0 +1,133 @@
+    <h2 id="s13">13. 代码索引与主要资料</h2>
+
+    <h3 id="s13-1">13.1 文档陈述与代码位置</h3>
+    <table>
+      <caption>表 29 · 本文档与仓库文件的对应关系</caption>
+      <thead><tr><th>文档内容</th><th>代码位置</th></tr></thead>
+      <tbody>
+        <tr><td>区域预设、18 条知识库、中国适用性</td><td><code>src/modules/projection/presets.ts</code></td></tr>
+        <tr><td>特征提取、三层规则、置信度合并</td><td><code>src/modules/projection/ruleEngine.ts</code></td></tr>
+        <tr><td>有效参数、6° 分带、标准纬线</td><td><code>src/modules/projection/params.ts</code></td></tr>
+        <tr><td>d3 投影工厂、展示带、裁剪、Tissot、整饰</td><td><code>src/modules/projection/d3Factory.ts</code></td></tr>
+        <tr><td>PROJ4 / WKT / EPSG 提示</td><td><code>src/modules/projection/exporters.ts</code></td></tr>
+        <tr><td>正算 / 反算</td><td><code>src/modules/projection/convert.ts</code></td></tr>
+        <tr><td>AI 增强推荐</td><td><code>src/modules/projection/aiClient.ts</code></td></tr>
+        <tr><td>教学助手状态机、离线解析、动作契约</td><td><code>src/modules/projection/assistant.ts</code></td></tr>
+        <tr><td>SVG 规范化校验</td><td><code>src/modules/symbol/standardize.ts</code></td></tr>
+        <tr><td>Iconify 搜索与中文词库</td><td><code>src/modules/symbol/iconify.ts</code></td></tr>
+        <tr><td>符号库导入合并</td><td><code>src/modules/symbol/transfer.ts</code></td></tr>
+        <tr><td>符号库 store、本地持久化</td><td><code>src/modules/symbol/library.ts</code></td></tr>
+        <tr><td>CloudBase 开关、认证、同步</td><td><code>src/modules/cloud/{client,auth,sync}.ts</code></td></tr>
+        <tr><td>问答 AI 通道与离线知识库</td><td><code>src/modules/qa/qaClient.ts</code></td></tr>
+        <tr><td>AI 代理（本地 / SCF）</td><td><code>server/ai-proxy.mjs</code> / <code>server/ai-proxy.scf.cjs</code></td></tr>
+        <tr><td>框选小地图、缩放容器、预览组件</td><td><code>src/components/{ExtentMapPicker,ZoomableMap,ProjectionPreview}.vue</code></td></tr>
+        <tr><td>总览与实验室</td><td><code>src/components/{ProjectionGallery,ProjectionLab}.vue</code></td></tr>
+        <tr><td>规格与验收用例</td><td><code>spec/01</code>–<code>spec/09</code>、<code>test-fixtures/</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s13-2">13.2 主要资料</h3>
+    <ol class="refs">
+      <li>Snyder, J. P. <em>Map Projections: A Working Manual</em>. USGS Professional Paper 1395, 1987.</li>
+      <li>d3-geo 文档：<a href="https://d3js.org/d3-geo" target="_blank" rel="noopener">https://d3js.org/d3-geo</a>；d3-geo-projection：<a href="https://github.com/d3/d3-geo-projection" target="_blank" rel="noopener">github.com/d3/d3-geo-projection</a>。</li>
+      <li>proj4js 文档与源码：<a href="https://github.com/proj4js/proj4js" target="_blank" rel="noopener">github.com/proj4js/proj4js</a>。</li>
+      <li>RFC 7946, <em>The GeoJSON Format</em>, 2016：<a href="https://datatracker.ietf.org/doc/html/rfc7946" target="_blank" rel="noopener">datatracker.ietf.org/doc/html/rfc7946</a>。</li>
+      <li>TopoJSON 与 world-atlas：<a href="https://github.com/topojson/world-atlas" target="_blank" rel="noopener">github.com/topojson/world-atlas</a>。</li>
+      <li>EPSG 方法编号与参数：<a href="https://epsg.org/" target="_blank" rel="noopener">epsg.org</a>；IOGP Guidance Note 7-2 坐标操作参数。</li>
+      <li>腾讯云开发 CloudBase 文档：<a href="https://docs.cloudbase.net/" target="_blank" rel="noopener">docs.cloudbase.net</a>。</li>
+      <li>Iconify API：<a href="https://iconify.design/docs/api/" target="_blank" rel="noopener">iconify.design/docs/api</a>。</li>
+      <li>Vue 3、Vite、Element Plus 官方文档。</li>
+      <li>本项目规格：<code>spec/01-需求规格说明书.md</code> 至 <code>spec/09-功能规格-投影总览分组与图面整饰.md</code>。</li>
+    </ol>
+
+    <h2 id="s14">14. 版本与变更</h2>
+
+    <h3 id="s14-1">14.1 2026-10-19：后端收敛为 CloudBase</h3>
+    <p>班级自建服务器方案下线，统一为腾讯云开发 CloudBase：邮箱验证码注册、邮箱 / 用户名双通道登录、文档数据库 <code>symbol_libraries</code>、PRIVATE 权限按 uid 隔离。前端 SDK 动态 import，未配置环境时保持纯本地模式。用户名正则与学号 <code>s</code> 前缀归一化在同一天对齐。</p>
+
+    <h3 id="s14-2">14.2 2026-10-20：总览与问答</h3>
+    <p>投影知识库从 12 条扩到 18 条，新增正弦、多圆锥、正射、球心、自然地球、等地球；规则引擎不新增规则。推荐页底部增加 18 幅总览，每幅含类别、性质与推荐缘由。新增 <code>/#/qa</code> 问答页，复用 AI 代理，AI 不可用时落到别名 + FAQ 离线知识库。</p>
+    <p>同日修复世界视图的展示带：圆锥极点扇形、墨卡托默认 clipExtent、横轴墨卡托奇异区导致 fitExtent 包围盒失真的问题；展示带内陆地与经纬网按经纬度矩形裁剪后再投影。</p>
+
+    <h3 id="s14-3">14.3 2026-10-21：教学助手与图面整饰</h3>
+    <p>新增投影实验室与教学助手：自然语言解析为受限动作，支持区域、A/B 投影、四类图层、标记点与撤销；AI 不可用时由内置中文解析器兜底。动作解析、白名单、状态快照与撤销都在前端完成。</p>
+    <p>总览升级为“同一套 18 种投影 × 中国 / 世界两种成图区域 = 36 幅”，增加模块选择、姿态分类、中国全图适用性三级标注；每幅补齐经纬度标注、指北针、比例尺、图例。整饰层不随缩放移动，比例尺按缩放倍率重算。推荐方案预览同步加上整饰，导出 SVG / PNG 自带内联样式。</p>
+
+    <h3 id="s14-4">14.4 待办与已知缺口</h3>
+    <table>
+      <caption>表 30 · 已知缺口（按影响排序）</caption>
+      <thead><tr><th>缺口</th><th>影响</th><th>建议处理</th></tr></thead>
+      <tbody>
+        <tr><td>AI 返回的 <code>params</code> 未进入 <code>effectiveParams</code></td><td>模型建议的标准纬线 / 中央经线不会改变预览与导出</td><td>在 <code>effectiveParams</code> 增加“AI 覆盖”优先级，或在推荐卡注明“参数以区域推导为准”</td></tr>
+        <tr><td>只实现 6° 分带，未实现 3° 分带</td><td>1:1 万及更大比例尺地形图的带号与中央经线无法切换</td><td>增加带宽选项，并按 3° 带标准重新推导带号与中央经线（3° 带与 6° 带的编号起点不同，不能直接套用同一式子）</td></tr>
+        <tr><td>SVG 消毒不是完整白名单</td><td>事件属性、伪协议、CSS url() 未逐项剥离</td><td>引入 DOMPurify 或自建白名单；导入陌生文件前提示风险</td></tr>
+        <tr><td>无浏览器端到端自动化</td><td>按钮级回归依赖手工</td><td>在可用环境接入 Playwright；保留模块脚本作为快速门禁</td></tr>
+        <tr><td>AI 上游限流与供应商依赖</td><td>429 时自动降级，用户看到规则结果</td><td>多供应商 fallback、退避重试、在界面标明降级原因</td></tr>
+        <tr><td>无教师端与作业提交</td><td>教师无法汇总查看班级符号库</td><td>另开管理员规则或云函数聚合，不在前端放开跨用户读权限</td></tr>
+        <tr><td>不做距离量算</td><td>助手对“距离”只标位置</td><td>需要时按大圆距离或投影平面距离分别实现，并明确口径</td></tr>
+        <tr><td>中文词库存在子串优先</td><td>“火车站”先命中“车站”</td><td>按最长关键词优先匹配，或调整词条顺序</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="s15">15. 部署与运行</h2>
+
+    <h3 id="s15-1">15.1 本地</h3>
+    <pre><code>npm install
+npm run dev        # 前端 http://localhost:5173
+npm run server     # 可选：AI 代理 http://localhost:8787
+npm run build      # 类型检查 + 生产构建
+npm run preview    # 预览 dist</code></pre>
+    <p>本地开发时 Vite 把 <code>/api</code> 代理到 <code>http://localhost:8787</code>，前端代码不需要处理跨域。AI 代理从 <code>.env</code> 读取密钥；<code>.env</code> 不入库。</p>
+
+    <h3 id="s15-2">15.2 GitHub Pages</h3>
+    <p>构建产物是纯静态文件。路由用 hash 模式（<code>/#/projection</code>），资源用相对路径（<code>base: './'</code>），因此子路径部署不需要服务端回退配置。push 到 <code>main</code> 后 GitHub Actions 自动构建并推送 <code>gh-pages</code>；<code>npm run deploy</code> 是手动备选。</p>
+    <p>仓库 Variables 需要配置构建期公开变量：<code>VITE_TCB_ENV</code>（CloudBase 环境 ID）、<code>VITE_AI_BASE_URL</code>（SCF 函数 URL）。<code>VITE_</code> 变量会进入前端产物，不是密钥；真正的密钥只在 SCF 环境变量与本地 <code>.env</code>。</p>
+
+    <h3 id="s15-3">15.3 AI 代理（SCF Web 函数）</h3>
+    <ol>
+      <li>腾讯云 → 云函数 SCF → 新建 Web 函数，运行时 Node.js 18；</li>
+      <li>函数 URL：公网访问启用，授权类型“开放”（免鉴权）；</li>
+      <li>环境变量：<code>LLM_API_KEY</code>、<code>LLM_BASE_URL</code>（只填到 <code>/v1</code>）、<code>LLM_MODEL</code>、<code>ALLOW_ORIGIN=https://hqj00.github.io</code>、<code>PORT=9000</code>；</li>
+      <li>把 <code>server/ai-proxy.scf.cjs</code> 全文粘贴进模板 <code>app.js</code>，保留模板其他文件不动；</li>
+      <li>执行超时调到不少于 120 秒（默认 3 秒不够；启用退避重试时更长）；</li>
+      <li>复制函数 URL，写入仓库变量 <code>VITE_AI_BASE_URL</code>，重新构建部署。</li>
+    </ol>
+    <p>代理只做三件事：保管密钥、转发 OpenAI 兼容 <code>/chat/completions</code>、超时与错误透传。它不区分推荐 / 助手 / 问答，业务语义全在 system prompt 与前端解析。</p>
+
+    <h3 id="s15-4">15.4 环境变量</h3>
+    <table>
+      <caption>表 31 · 环境变量</caption>
+      <thead><tr><th>变量</th><th>位置</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>VITE_AI_BASE_URL</code></td><td>构建期 / 仓库 Variables</td><td>AI 代理根地址；未配置时隐藏 AI 入口并走离线通道</td></tr>
+        <tr><td><code>VITE_TCB_ENV</code></td><td>构建期 / 仓库 Variables</td><td>CloudBase 环境 ID；未配置时纯本地模式</td></tr>
+        <tr><td><code>LLM_API_KEY</code></td><td>本地 <code>.env</code> / SCF</td><td>上游密钥，只存服务端</td></tr>
+        <tr><td><code>LLM_BASE_URL</code></td><td>本地 <code>.env</code> / SCF</td><td>OpenAI 兼容端点根地址</td></tr>
+        <tr><td><code>LLM_MODEL</code></td><td>本地 <code>.env</code> / SCF</td><td>模型名，默认 <code>gpt-4o-mini</code></td></tr>
+        <tr><td><code>ALLOW_ORIGIN</code></td><td>本地 <code>.env</code> / SCF</td><td>允许的前端来源；线上填 Pages 域名，本地默认 5173</td></tr>
+        <tr><td><code>PORT</code></td><td>本地 / SCF</td><td>本地默认 8787；SCF Web 函数固定 9000</td></tr>
+        <tr><td><code>UPSTREAM_TIMEOUT</code></td><td>代理环境</td><td>上游超时毫秒数，默认 115000</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s15-5">15.5 排错</h3>
+    <table>
+      <caption>表 32 · 常见故障与定位</caption>
+      <thead><tr><th>现象</th><th>最可能原因</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>Pages 上登录报 <code>Failed to fetch</code></td><td>CloudBase 未配置 Web 安全域名</td><td>控制台添加 <code>hqj00.github.io</code>（本地加 <code>localhost</code>）</td></tr>
+        <tr><td>AI 入口不显示</td><td>构建时没有 <code>VITE_AI_BASE_URL</code></td><td>配置仓库 Variables 后重新构建；本地用 localhost 自动判定</td></tr>
+        <tr><td>AI 勾选后立刻降级</td><td>上游 429 / 504 / 非法 JSON</td><td>看 SCF 日志与代理商返回；换供应商或调大超时</td></tr>
+        <tr><td>本地直连 SCF 被 CORS 拦</td><td><code>ALLOW_ORIGIN</code> 只放行 Pages 域名</td><td>本地走 <code>/api</code> 代理，或把 localhost 加进白名单</td></tr>
+        <tr><td>静态托管上刷新子路由 404</td><td>用了 history 路由</td><td>本项目用 hash 路由，确认没有改回 <code>createWebHistory</code></td></tr>
+        <tr><td>参考影像 404</td><td>资源路径不是相对路径</td><td>确认 <code>vite.config.ts</code> 的 <code>base: './'</code>，图片用相对路径</td></tr>
+        <tr><td>改了代码线上没变</td><td>Actions 未完成或缓存</td><td>看 Actions 运行记录；硬刷新 / 清缓存</td></tr>
+      </tbody>
+    </table>
+
+    <div class="doc-footer">
+      <p>本文档记录 studentmap 学生端 2026-10-21 的实现状态，对应仓库提交 <code>11cc8f6</code>。公式由 KaTeX 0.19.0 预渲染，页面无脚本、可离线打开；KaTeX 采用 MIT 许可，d3 采用 BSD-3-Clause，proj4js 采用 MIT 许可。</p>
+      <p>文档自身的源文件位于仓库 <code>docs/parts/</code>，由 <code>docs/gen-doc.mjs</code> 生成到 <code>public/docs/studentmap-technical.html</code>。规格变更时先改 <code>spec/</code>，再同步本文档与代码。</p>
+    </div>
+  </main>
+</div>

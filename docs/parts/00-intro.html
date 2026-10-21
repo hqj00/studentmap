@@ -1,0 +1,152 @@
+<header class="doc-top">
+  <div>
+    <strong>studentmap 学生端：地图投影推荐与符号设计技术文档</strong>
+    <span>5 ROUTES / 18 PROJECTIONS / RULE + AI / OFFLINE FIRST</span>
+  </div>
+  <div class="doc-tools">
+    <a href="#top">回到文档顶部</a>
+    <a href="https://hqj00.github.io/studentmap/" target="_blank" rel="noopener">在线应用</a>
+    <a href="https://github.com/hqj00/studentmap/tree/main/spec" target="_blank" rel="noopener">规格目录</a>
+  </div>
+</header>
+
+<div class="doc-layout" id="top">
+  <nav class="toc" aria-label="目录">
+    <b>目 录</b>
+    <!--TOC-->
+  </nav>
+
+  <main>
+    <h1>studentmap 学生端：地图投影推荐与符号设计技术文档</h1>
+    <p class="math-note">版本：2026-10-21 · F1–F4 全功能实现版 · 对应仓库 <code>hqj00/studentmap</code> 提交 <code>11cc8f6</code></p>
+
+    <p>这份文档回答三个问题：推荐结果为什么是它、图上的每一个点为什么落在那里、符号与账号数据在什么条件下会丢。它面向三类读者——要理解推荐理由的学生、要复核实现是否与规格一致的教师、以及接手代码的开发者。</p>
+    <p>文档只记录<strong>已经进入代码</strong>的行为。规划中的能力集中在 §14.4，不与已实现内容混写。所有公式、阈值、参数表都能在仓库中找到对应实现；公式编号 (1)–(34) 供交叉引用，不复刻教材推导。</p>
+
+    <p class="math-note">阅读约定：坐标一律写作 <span class="imath" data-tex="[\lambda,\varphi]"></span>（经度、纬度），单位度；平面坐标写作 <span class="imath" data-tex="(X,Y)"></span>，单位米；<span class="imath" data-tex="R=6371000\ \mathrm{m}"></span> 仅用于教学预览与比例尺，PROJ4 导出与坐标试算使用 WGS84 椭球。代码块为 TypeScript / JavaScript 摘录，省略 import 与样式。</p>
+
+    <h2 id="s1">1. 文档范围与系统边界</h2>
+
+    <h3 id="s1-1">1.1 五个页面与三条链路</h3>
+    <p>studentmap 是一个纯静态可部署的 Vue 3 单页应用。页面按功能分为五个路由，底层归并为三条链路：</p>
+
+    <table>
+      <caption>表 1 · 路由、视图与离线可用性</caption>
+      <thead><tr><th>路由</th><th>视图</th><th>承担的功能</th><th>断网时</th></tr></thead>
+      <tbody>
+        <tr><td><code>/#/projection</code></td><td><code>ProjectionRecommendView</code></td><td>投影推荐、双方案对比、投影实验室、36 幅总览、参数导出、坐标试算</td><td>规则推荐、预览、导出、试算均可用</td></tr>
+        <tr><td><code>/#/qa</code></td><td><code>MapQaView</code></td><td>地图学问答</td><td>降级为站内离线知识库</td></tr>
+        <tr><td><code>/#/smart-symbols</code></td><td><code>SmartSymbolDesignView</code></td><td>描述 → Iconify 搜索 → 校验 → 入库</td><td>不可搜索；已入库符号仍可查看</td></tr>
+        <tr><td><code>/#/symbols</code></td><td><code>SymbolDesignView</code></td><td>五步符号设计向导、符号库、JSON 导入导出</td><td>完全可用（localStorage）</td></tr>
+        <tr><td><code>/#/login</code></td><td><code>LoginView</code></td><td>CloudBase 注册 / 登录 / 退出</td><td>不可登录；本地模式不受影响</td></tr>
+      </tbody>
+    </table>
+
+    <p>三条链路分别是：</p>
+    <ol>
+      <li><strong>投影链路</strong>：区域 + 用途 → 规则引擎（必跑）→ 可选 AI 增强 → 有效参数 → d3 预览 / 图面整饰 → PROJ4 / WKT / 坐标试算；</li>
+      <li><strong>符号链路</strong>：描述或向导 → iconfont / Illustrator / Iconify → SVG 规范化校验 → 符号库 →（登录后）CloudBase 同步；</li>
+      <li><strong>自然语言链路</strong>：问答或教学助手 → AI 代理 → 合法 JSON / 文本 → 确定性校验与状态变更；失败时分别落到离线 FAQ 与离线指令解析器。</li>
+    </ol>
+
+    <h3 id="s1-2">1.2 坐标、单位与数据口径</h3>
+    <p>系统只做<strong>投影数学</strong>与<strong>教学示意</strong>，不做大地基准转换。具体口径如下：</p>
+    <ul>
+      <li>输入输出统一为 <span class="imath" data-tex="[\lambda,\varphi]"></span>，经度 <span class="imath" data-tex="-180^\circ\sim180^\circ"></span>，纬度 <span class="imath" data-tex="-90^\circ\sim90^\circ"></span>；</li>
+      <li>不做 WGS84 / CGCS2000 / 北京 54 / 西安 80 的基准转换，不做 GCJ-02 / BD-09 偏移纠偏，不处理高程；</li>
+      <li>预览与总览使用球面近似 <span class="imath" data-tex="R=6371000\ \mathrm{m}"></span>；PROJ4 定义带 <code>+datum=WGS84</code>，坐标试算由 proj4js 按椭球计算；</li>
+      <li>页面输出的米制坐标<strong>不是</strong> EPSG:3857；Web 墨卡托只在知识库提示中出现；</li>
+      <li>中国全图参数（105°E / 25°N / 47°N）是公开出版地图的<strong>教学惯例</strong>，不替代国家法定测绘产品的投影规定。</li>
+    </ul>
+
+    <h3 id="s1-3">1.3 技术栈与运行形态</h3>
+    <table>
+      <caption>表 2 · 技术选型与职责</caption>
+      <thead><tr><th>层</th><th>选型</th><th>在本项目中的职责</th></tr></thead>
+      <tbody>
+        <tr><td>前端框架</td><td>Vue 3.5 + TypeScript 5.6 + Vite 5.4</td><td>页面、状态、构建期类型检查（<code>vue-tsc --noEmit</code>）</td></tr>
+        <tr><td>UI</td><td>Element Plus 2.8</td><td>表单、卡片、对话、上传；主色由 <code>theme.css</code> 覆盖为绿色</td></tr>
+        <tr><td>投影渲染</td><td>d3-geo 3.1 + d3-geo-projection 4.0</td><td>18 种投影的 SVG 预览、经纬网、Tissot 椭圆、图面整饰</td></tr>
+        <tr><td>坐标计算</td><td>proj4js 2.22</td><td>正算 / 反算，直接消费导出的同一份 PROJ4 字符串</td></tr>
+        <tr><td>底图数据</td><td>world-atlas land-110m + topojson-client</td><td>约 55 KB 陆地轮廓，随包分发、离线可用</td></tr>
+        <tr><td>云端</td><td>腾讯云开发 CloudBase（JS SDK 3.10）</td><td>邮箱验证码注册、登录态、文档数据库；SDK 动态 import 拆 chunk</td></tr>
+        <tr><td>AI 代理</td><td>Node 原生 <code>http</code>（本地）/ SCF Web 函数（线上）</td><td>保管密钥、转发 OpenAI 兼容 Chat Completions、超时控制</td></tr>
+        <tr><td>部署</td><td>GitHub Pages + GitHub Actions</td><td>hash 路由 + 相对资源路径；push main 自动构建发布</td></tr>
+      </tbody>
+    </table>
+
+    <p>运行形态的关键事实：<strong>唯一的服务端组件是 AI 代理</strong>。其余全部在浏览器内完成；未配置 <code>VITE_AI_BASE_URL</code> 时，应用仍是一个完整的离线可用工具。CloudBase 是托管 BaaS，不是自建后端，权限由数据库安全规则兜底，前端不持有密钥。</p>
+
+    <h3 id="s1-4">1.4 不做什么</h3>
+    <ul>
+      <li>不实现 iconfont 站内搜索 API，也不嵌入 Adobe Illustrator——两者是外部工具，本应用只做引导、prompt、校验与承接；</li>
+      <li>不做瓦片地图、不做地形晕渲、不做距离量算（教学助手对“距离”类请求只标注位置）；</li>
+      <li>不做教师端、作业提交、多人协作；账号体系只服务“每人自己的符号库”；</li>
+      <li>不把 AI 输出当作事实源：AI 只能选择知识库内的投影、解释理由、把自然语言解析为受限动作；数学计算与状态变更由确定性代码执行。</li>
+    </ul>
+
+    <h2 id="s2">2. 功能目录与固定顺序</h2>
+
+    <h3 id="s2-1">2.1 投影知识库：18 条固定条目</h3>
+    <p>18 种投影以固定顺序登记在 <code>src/modules/projection/presets.ts</code> 的 <code>PROJECTION_KB</code> 中。顺序即编号：总览卡片、筛选结果、AI 候选都沿用这一编号，便于中国 / 世界两个模块对照同一种投影。规则引擎只使用其中的 12 条（新增的 6 条服务总览与 AI 候选，不改变既有推荐行为）。</p>
+
+    <table>
+      <caption>表 3 · 18 种投影与知识库字段</caption>
+      <thead><tr><th>#</th><th>id</th><th>中文名</th><th>类别</th><th>变形性质</th><th>进入推荐的路径</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>mercator</code></td><td>墨卡托投影</td><td>圆柱</td><td>等角</td><td>低纬导航 / 低纬一般</td></tr>
+        <tr><td>2</td><td><code>transverse-mercator</code></td><td>横轴墨卡托 / 高斯-克吕格</td><td>圆柱（横轴）</td><td>等角</td><td>地形图 / 南北狭长</td></tr>
+        <tr><td>3</td><td><code>lambert-conformal-conic</code></td><td>兰伯特等角圆锥</td><td>圆锥</td><td>等角</td><td>中纬气象 / 中纬一般</td></tr>
+        <tr><td>4</td><td><code>albers-equal-area-conic</code></td><td>阿尔伯斯等积圆锥</td><td>圆锥</td><td>等积</td><td>中国全图 / 中纬统计</td></tr>
+        <tr><td>5</td><td><code>azimuthal-equidistant</code></td><td>方位等距</td><td>方位</td><td>等距</td><td>极地用途 / 备选</td></tr>
+        <tr><td>6</td><td><code>polar-stereographic</code></td><td>极地立体</td><td>方位</td><td>等角</td><td>极地导航 / 高纬</td></tr>
+        <tr><td>7</td><td><code>lambert-azimuthal-equal-area</code></td><td>兰伯特方位等积</td><td>方位</td><td>等积</td><td>高纬统计</td></tr>
+        <tr><td>8</td><td><code>equidistant-cylindrical</code></td><td>等距圆柱</td><td>圆柱</td><td>等距</td><td>低纬教学备选</td></tr>
+        <tr><td>9</td><td><code>gall-peters</code></td><td>高尔-彼得斯</td><td>圆柱</td><td>等积</td><td>低纬统计</td></tr>
+        <tr><td>10</td><td><code>robinson</code></td><td>罗宾逊</td><td>折中</td><td>折中</td><td>世界挂图 / 教学</td></tr>
+        <tr><td>11</td><td><code>winkel-tripel</code></td><td>温克尔三重</td><td>折中</td><td>折中</td><td>世界挂图 / 教学</td></tr>
+        <tr><td>12</td><td><code>mollweide</code></td><td>摩尔魏特</td><td>伪圆柱</td><td>等积</td><td>世界统计</td></tr>
+        <tr><td>13</td><td><code>sinusoidal</code></td><td>正弦曲线（桑逊）</td><td>伪圆柱</td><td>等积</td><td>总览 / AI 候选</td></tr>
+        <tr><td>14</td><td><code>polyconic</code></td><td>多圆锥</td><td>圆锥</td><td>折中</td><td>总览 / AI 候选</td></tr>
+        <tr><td>15</td><td><code>orthographic</code></td><td>正射方位</td><td>方位</td><td>折中</td><td>总览 / AI 候选</td></tr>
+        <tr><td>16</td><td><code>gnomonic</code></td><td>球心（日晷）</td><td>方位</td><td>折中</td><td>总览 / AI 候选</td></tr>
+        <tr><td>17</td><td><code>natural-earth</code></td><td>自然地球</td><td>伪圆柱</td><td>折中</td><td>总览 / AI 候选</td></tr>
+        <tr><td>18</td><td><code>equal-earth</code></td><td>等地球</td><td>伪圆柱</td><td>等积</td><td>总览 / AI 候选</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s2-2">2.2 双通道降级矩阵</h3>
+    <p>“AI 可用”的判定只有两条：构建期配置了 <code>VITE_AI_BASE_URL</code>，或页面运行在 <code>localhost</code> / <code>127.0.0.1</code>（走 Vite 的 <code>/api → 8787</code> 代理）。不满足时，AI 入口直接隐藏，而不是等请求失败再报错。</p>
+
+    <table>
+      <caption>表 4 · 各功能在 AI 可用 / 不可用时的行为</caption>
+      <thead><tr><th>功能</th><th>AI 可用</th><th>AI 不可用或失败</th><th>界面来源标记</th></tr></thead>
+      <tbody>
+        <tr><td>投影推荐</td><td>规则候选 + 知识库摘要发给模型，模型排序并解释</td><td>直接输出规则结果，不显示警告以外的干扰</td><td>“AI（供学习参考）” / “规则引擎”</td></tr>
+        <tr><td>教学助手</td><td>自然语言 → JSON 动作</td><td>内置中文指令解析器 → 同一套动作</td><td>“AI 助教” / “离线解析”</td></tr>
+        <tr><td>地图学问答</td><td>最近 10 条上下文 + 助教 system prompt</td><td>别名匹配 18 条知识库 + FAQ 关键词</td><td>“AI 助教” / “离线知识库”</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s2-3">2.3 模块依赖</h3>
+    <pre><code>projection/
+  presets.ts      → 区域预设、18 条知识库、中国适用性
+  ruleEngine.ts   → 特征提取 + 三层规则 + 合并排序
+  params.ts       → 有效参数（中央经线 / 标准纬线 / 分带）
+  d3Factory.ts    → 投影实例 + 图层 + 图面整饰
+  exporters.ts    → PROJ4 / WKT / EPSG 提示
+  convert.ts      → proj4js 正算 / 反算（消费 exporters 的字符串）
+  aiClient.ts     → AI 增强推荐（失败即抛出，由视图降级）
+  assistant.ts    → 实验台状态机 + 离线指令解析 + AI 动作契约
+
+symbol/
+  types.ts        → SymbolRecord
+  standardize.ts  → SVG 规范化校验（唯一安全入口）
+  iconify.ts      → 中文词库、Iconify 搜索、SVG 下载
+  transfer.ts     → JSON 导入合并（逐条重新校验）
+  library.ts      → localStorage store + 登录后云同步
+
+cloud/            → CloudBase 开关、认证、拉取 / 推送 / 合并
+qa/               → 问答 AI 通道 + 离线知识库</code></pre>
+
+    <p>依赖方向是单向的：<code>ruleEngine</code> 依赖 <code>presets</code>，<code>convert</code> 依赖 <code>exporters</code>，<code>library</code> 依赖 <code>transfer</code> 与 <code>cloud</code>；反向不成立。投影模块与符号模块互不引用，可以独立测试与演进。</p>

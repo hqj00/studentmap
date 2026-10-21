@@ -1,0 +1,178 @@
+    <h2 id="s10">10. 从经纬度到屏幕像素</h2>
+
+    <h3 id="s10-1">10.1 四层坐标</h3>
+    <p>一个点从经纬度到屏幕，经过四层坐标。把层分清，才能解释“为什么放大后点不会跑、为什么框选得到的是经纬度、为什么导出的 SVG 比屏幕清晰”。</p>
+
+    <table>
+      <caption>表 23 · 四层坐标与负责模块</caption>
+      <thead><tr><th>层</th><th>坐标</th><th>单位</th><th>负责模块</th></tr></thead>
+      <tbody>
+        <tr><td>地理坐标</td><td><span class="imath" data-tex="[\lambda,\varphi]"></span></td><td>度</td><td>输入、预设、GeoJSON</td></tr>
+        <tr><td>投影平面</td><td><span class="imath" data-tex="(X,Y)"></span></td><td>米（试算 / 导出）或投影单位（d3）</td><td>proj4js / d3-geo</td></tr>
+        <tr><td>SVG viewBox</td><td><span class="imath" data-tex="(x_{vb},y_{vb})"></span></td><td>用户单位</td><td>d3 <code>geoPath</code> + <code>fitExtent</code></td></tr>
+        <tr><td>屏幕 CSS 像素</td><td><span class="imath" data-tex="(c_x,c_y)"></span></td><td>px</td><td>浏览器按 <code>viewBox</code> 缩放</td></tr>
+      </tbody>
+    </table>
+
+    <p>预览与框选小地图是两套投影：预览用当前推荐投影；小地图固定用等距圆柱。因此“在地图上框选”得到的是小地图反算的经纬度，不需要经过推荐投影的反算。</p>
+
+    <h3 id="s10-2">10.2 框选反算</h3>
+    <p>小地图的 viewBox 固定为 <span class="imath" data-tex="720\times360"></span>，但屏幕尺寸随容器变化。先把鼠标位置换算到 viewBox：</p>
+
+    <div class="formula" data-tex="x_{vb}=\frac{(c_x-r_x)\,W}{r_w},\qquad y_{vb}=\frac{(c_y-r_y)\,H}{r_h}" data-no="32"></div>
+
+    <p>其中 <span class="imath" data-tex="(r_x,r_y)"></span> 是 SVG 的屏幕矩形左上角，<span class="imath" data-tex="(r_w,r_h)"></span> 是屏幕宽高，<span class="imath" data-tex="W=720"></span>、<span class="imath" data-tex="H=360"></span>。再用等距圆柱的反函数得到经纬度，夹取并保留 0.1°：</p>
+
+    <div class="formula" data-tex="\lambda=\frac{\mathrm{round}\left(10\cdot\mathrm{clamp}(\lambda_0,-180,180)\right)}{10},\qquad \varphi=\frac{\mathrm{round}\left(10\cdot\mathrm{clamp}(\varphi_0,-90,90)\right)}{10}" data-no="33"></div>
+
+    <p>按下与松开的距离小于 8px（任一方向）视为误触，不产生选择。松手后把两个角点归一化为 <code>min/max</code>，因此从右下往左上拉框同样有效。框选结果写入自定义四至，并把输入模式切到“自定义经纬度”。</p>
+
+    <h3 id="s10-3">10.3 缩放、标记与比例尺</h3>
+    <p>缩放只改变 SVG 组变换，不重算投影。以指针为不动点的公式见式 (19)。三类元素的行为不同：</p>
+    <ul>
+      <li><strong>地图内容</strong>（球面、陆地、经纬网、Tissot、标记点、经纬度标注）：在变换组内，随缩放一起放大；</li>
+      <li><strong>整饰层</strong>（指北针、图例）：在变换组外，位置与大小不变；</li>
+      <li><strong>比例尺</strong>：在变换组外，但长度按当前倍率 <span class="imath" data-tex="z"></span> 重算式 (18)，所以标注的千米数始终正确。</li>
+    </ul>
+
+    <p>“允许拖动”开关默认关闭。关闭时滚轮与拖拽都不生效，只能用右上角 ＋/－/重置按钮；开启后才允许指针捕获拖拽与以指针为中心的滚轮缩放。这样浏览 36 幅总览时不会因为误拖而把图面移出视野。</p>
+
+    <h3 id="s10-4">10.4 完整算例：郑州点在中国阿尔伯斯预览中的位置</h3>
+    <p>输入点郑州 <span class="imath" data-tex="[113.6254^\circ,34.7466^\circ]"></span>，区域取中国全图，投影取阿尔伯斯。有效参数为中央经线 105°E、双标准纬线 25°N / 47°N、原点纬度 0°。</p>
+
+    <table>
+      <caption>表 24 · 郑州点的逐层数值</caption>
+      <thead><tr><th>层</th><th>结果</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>地理坐标</td><td>113.6254°E, 34.7466°N</td><td>输入</td></tr>
+        <tr><td>投影平面（proj4js）</td><td>X = 774 868.623 m，Y = 3 739 871.786 m</td><td>与导出的 PROJ4 同一定义</td></tr>
+        <tr><td>反算校验</td><td>113.6254°E, 34.7466°N</td><td>误差 <span class="imath" data-tex="7.11\times10^{-15}\,^{\circ}"></span></td></tr>
+        <tr><td>预览 viewBox（420×260）</td><td>(246.49, 112.45)</td><td>d3 投影 + fitExtent 后</td></tr>
+        <tr><td>预览比例尺</td><td>23 442.06 m/px；选 2000 km，约 85.3 px</td><td>投影中心处局部近似</td></tr>
+        <tr><td>总览缩略图（280×180）</td><td>(164.72, 78.11)</td><td>同一区域、不同画幅</td></tr>
+        <tr><td>总览比例尺</td><td>34 604.95 m/px；选 2000 km，约 57.8 px</td><td>目标长度 52 px</td></tr>
+      </tbody>
+    </table>
+
+    <p>两个画幅的像素坐标不同，但都对应同一个经纬度；比例尺的米/像素也不同，但标注的千米数都正确。这正是“投影决定形状、fitExtent 决定画幅、viewBox 决定屏幕尺寸”三层分工的结果。</p>
+
+    <h3 id="s10-5">10.5 执行顺序与边界</h3>
+    <ol>
+      <li>由区域与投影计算 <code>effectiveParams</code>；</li>
+      <li>创建 d3 投影，定向（rotate / center），<code>clipExtent(null)</code>，<code>fitExtent</code>；</li>
+      <li>生成球面、陆地、经纬网、范围框、Tissot 路径；</li>
+      <li>生成经纬度标注、比例尺换算、图例数据；</li>
+      <li>渲染为 SVG；</li>
+      <li>用户缩放 / 平移时只改变外层 <code>&lt;g transform&gt;</code>，不重跑 2–4；</li>
+      <li>框选时走小地图自己的等距圆柱反算，不经过预览投影。</li>
+    </ol>
+
+    <p>边界：预览的坐标单位不是米，不能拿 SVG 像素直接当平面坐标；比例尺只在投影中心附近可信；标记点与经纬度标注会随缩放变大，是“地图内容”，不是固定屏幕符号。需要固定屏幕尺寸的符号时，应放在整饰层而不是地图层。</p>
+
+    <h2 id="s11">11. 数值方法与异常处理</h2>
+
+    <h3 id="s11-1">11.1 空值与有限性</h3>
+    <p>投影计算可能返回 <code>NaN</code>、<code>Infinity</code> 或抛异常（极点、奇异区、proj4js 不支持的投影）。所有转换入口统一做有限性检查，失败返回 <code>null</code>，由界面显示“不支持”或省略该点，而不是把 <code>NaN</code> 写进 SVG 路径。</p>
+
+    <div class="formula" data-tex="\mathrm{fin}(v)=\begin{cases}v,&amp;|v|&lt;\infty\\ \mathrm{null},&amp;\text{otherwise}\end{cases}\qquad \mathrm{convert}(p)=\mathrm{fin}\left(P(p)\right)" data-no="34"></div>
+
+    <p>反算同样处理：框选点先夹取到合法范围，再四舍五入；试算输入先检查 <code>Number.isFinite</code>，否则提示“请先输入 X / Y”。</p>
+
+    <h3 id="s11-2">11.2 误差分层</h3>
+    <table>
+      <caption>表 25 · 四类误差，不要混为一谈</caption>
+      <thead><tr><th>类型</th><th>来源</th><th>本站的处理</th></tr></thead>
+      <tbody>
+        <tr><td>模型误差</td><td>球面近似 vs 椭球；教学展示带；投影本身的变形</td><td>明确标注“教学示意 / 局部近似”，不宣称测绘精度</td></tr>
+        <tr><td>数据误差</td><td>land-110m 简化轮廓；预设四至取整</td><td>底图仅用于形态示意；四至在界面显示到 0.1°</td></tr>
+        <tr><td>数值误差</td><td>浮点、迭代反算、proj4js 实现</td><td>往返误差以实测表给出；不承诺固定上限</td></tr>
+        <tr><td>显示误差</td><td>SVG 缩放、像素取整、标注避让</td><td>比例尺按投影中心换算；标注过近时省略</td></tr>
+      </tbody>
+    </table>
+
+    <p>四类误差不能用一个“精度”数字概括。说“坐标试算往返误差 1e-14 度”只说明数值反算稳定，不代表底图轮廓或投影变形同样精确。</p>
+
+    <h3 id="s11-3">11.3 失败时的用户可见行为</h3>
+    <table>
+      <caption>表 26 · 异常与降级</caption>
+      <thead><tr><th>场景</th><th>行为</th></tr></thead>
+      <tbody>
+        <tr><td>经纬度越界 / min 不小于 max</td><td>表单即时校验，禁止提交，红字提示</td></tr>
+        <tr><td>AI 超时 / 5xx / 非法 JSON / 未知投影 id</td><td>静默降级为规则结果，结果区提示“已降级为规则引擎推荐”</td></tr>
+        <tr><td>未配置 AI 代理</td><td>隐藏“大模型增强”入口，问答直接走离线知识库</td></tr>
+        <tr><td>proj4js 不支持该投影</td><td>试算区显示“该投影暂不支持坐标试算”，不崩溃</td></tr>
+        <tr><td>参考影像加载失败</td><td>整块隐藏，不影响其余内容</td></tr>
+        <tr><td>localStorage 写满</td><td>提示导出 JSON 备份后清理；当前会话不丢</td></tr>
+        <tr><td>云端不可达 / 未登录</td><td>本地模式继续工作；登录页显示提示</td></tr>
+        <tr><td>Iconify 搜索失败</td><td>显示错误与 iconfont 直达按钮，不白屏</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s11-4">11.4 性能预算</h3>
+    <ul>
+      <li>规则引擎：纯内存计算，目标小于 100ms；实际只做几次三角函数与排序，远低于预算。</li>
+      <li>预览：18 幅总览 × 陆地 / 经纬网 / 整饰，全部本地 SVG；没有瓦片请求，首屏不依赖网络。</li>
+      <li>AI：前端 125s、代理 115s；超时即降级，不阻塞页面其他功能。</li>
+      <li>构建：<code>vue-tsc --noEmit</code> + Vite 生产构建，2026-10-21 实测 2020 个模块、约 20–26 秒完成。</li>
+    </ul>
+
+    <h2 id="s12">12. 验证与复核</h2>
+
+    <h3 id="s12-1">12.1 已执行的离线验收</h3>
+    <p>仓库 <code>test-fixtures/</code> 下保留了模块级验收脚本。它们用 esbuild 把 <code>src</code> 模块打包成独立 <code>.mjs</code>，再用 Node 断言；需要 DOM 的校验器用 linkedom 垫 <code>DOMParser</code>。2026-10-21 重新执行结果如下：</p>
+
+    <table>
+      <caption>表 27 · 离线验收结果</caption>
+      <thead><tr><th>脚本</th><th>覆盖</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>run-rule-cases.mjs</code></td><td>spec/02 用例 1–5：中国统计、世界教学、极地、赤道导航、智利地形图</td><td>5 / 5 通过</td></tr>
+        <tr><td><code>run-convert-cases.mjs</code></td><td>阿尔伯斯、高斯-克吕格、墨卡托、方位等距、极地立体的正反算；温克尔三重返回 null</td><td>6 / 6 通过</td></tr>
+        <tr><td><code>run-exporter-cases.mjs</code></td><td>PROJ4 / WKT / EPSG 提示，含北京 6° 带中央经线 117°E</td><td>7 / 7 通过</td></tr>
+        <tr><td><code>run-standardize-cases.mjs</code></td><td>脚本拦截、viewBox 补全、非正方形、线宽、配色</td><td>7 / 7 通过</td></tr>
+        <tr><td><code>run-sync-cases.mjs</code></td><td>本地 / 云端按 id 并集、同 id 云端优先、顺序、空云端</td><td>5 / 5 通过</td></tr>
+        <tr><td><code>run-new-feature-cases.mjs</code></td><td>导入合法记录、混合包跳过、非法 JSON、非数组、独立 SVG 包装</td><td>5 / 5 通过</td></tr>
+        <tr><td><code>run-iconify-cases.mjs</code></td><td>中文词库转换、未命中兜底、在线搜索、SVG 下载、URL 拼装</td><td>5 / 5 通过（依赖网络）</td></tr>
+        <tr><td><code>npm run build</code></td><td><code>vue-tsc --noEmit</code> + Vite 生产构建</td><td>通过</td></tr>
+      </tbody>
+    </table>
+
+    <p>这些是<strong>模块级</strong>验证，不是浏览器端到端测试。它们能证明规则、参数、导出、校验、合并逻辑正确，不能证明每个按钮在每台设备上都能点。UI 层另用离线渲染脚本生成 SVG / 截图做视觉复核，原因见 §12.3。</p>
+
+    <h3 id="s12-2">12.2 验收用例覆盖</h3>
+    <table>
+      <caption>表 28 · 规格验收用例覆盖情况</caption>
+      <thead><tr><th>规格</th><th>用例范围</th><th>覆盖方式</th></tr></thead>
+      <tbody>
+        <tr><td>spec/01 需求规格</td><td>离线中国统计、AI 降级、脚本 SVG 拦截、刷新后符号仍在</td><td>规则 / 校验脚本 + 手工回归</td></tr>
+        <tr><td>spec/02 投影推荐</td><td>用例 1–11：推荐、参数、预览、PROJ4、框选、双方案、试算</td><td>规则 / 转换 / 导出脚本；预览与框选为渲染复核</td></tr>
+        <tr><td>spec/07 总览与问答</td><td>用例 1–11：18 幅、响应式、AI / 离线问答、筛选、按坐标、缩放</td><td>模块脚本 + 渲染脚本 + 手工回归</td></tr>
+        <tr><td>spec/08 教学助手</td><td>用例 1–7：A/B 切换、离线解析、标记、撤销、未识别输入</td><td>离线解析模块脚本 + 手工回归</td></tr>
+        <tr><td>spec/09 总览分区与整饰</td><td>验收 1–10：36 幅、模块切换、姿态、适用性、整饰、缩放</td><td>渲染脚本 + 手工回归；构建通过</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s12-3">12.3 未覆盖与已知限制</h3>
+    <ul>
+      <li><strong>没有浏览器端到端自动化</strong>：本机 IAB 环境下点击、打字、上传事件不送达页面，只有导航、读取、截图可用。因此 UI 验证以模块测试 + 离线渲染 + 手工回归为主，不把“输入不生效”误判为应用 bug。</li>
+      <li><strong>AI 依赖上游</strong>：2026-10-21 曾出现中转站账号组级 RPM 限流（429），线上自动降级为规则引擎；换供应商后恢复。限流不是前端 bug，但会改变用户看到的结果来源。</li>
+      <li><strong>proj4js 能力边界</strong>：温克尔三重不支持试算；其他投影以运行时为准。页面不预先列出“全部支持”，避免承诺过期。</li>
+      <li><strong>SVG 校验不是完整白名单</strong>：拦截脚本、<code>foreignObject</code>、外部 http(s) 引用，但未逐项剥离事件属性与伪协议；导入陌生人文件需谨慎。</li>
+      <li><strong>AI 参数未接入有效参数</strong>：见 §3.6 与 §14.4。</li>
+      <li><strong>不做基准转换</strong>：WGS84 / CGCS2000 / GCJ-02 / BD-09 的差异不在本应用处理；需要合法测绘成果时使用法定软件与数据。</li>
+    </ul>
+
+    <h3 id="s12-4">12.4 复现命令</h3>
+    <pre><code>npm install
+npm run dev            # http://localhost:5173
+npm run server         # 可选：AI 代理 8787
+npm run build          # 类型检查 + 生产构建
+npm run deploy         # 构建并发布 gh-pages（手动备选）
+
+# 离线验收（在 test-fixtures/ 下）
+node run-rule-cases.mjs
+node run-convert-cases.mjs
+node run-exporter-cases.mjs
+node run-standardize-cases.mjs   # 需 linkedom
+node run-sync-cases.mjs
+node run-new-feature-cases.mjs   # 需 linkedom
+node run-iconify-cases.mjs       # 需网络</code></pre>

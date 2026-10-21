@@ -1,0 +1,93 @@
+    <h2 id="s4">4. 有效参数与参数导出</h2>
+
+    <h3 id="s4-1">4.1 中央经线与 6° 分带</h3>
+    <p>除高斯-克吕格外，中央经线取区域中心经度并四舍五入到 0.1°。高斯-克吕格按 6° 分带：</p>
+
+    <div class="formula" data-tex="n=\left\lfloor\frac{\lambda_c}{6^\circ}\right\rfloor+1,\qquad \lambda_0=6n-3" data-no="6"></div>
+
+    <p>例：郑州 <span class="imath" data-tex="\lambda_c=113.6254^\circ"></span>，<span class="imath" data-tex="n=\lfloor18.9376\rfloor+1=19"></span>，<span class="imath" data-tex="\lambda_0=111^\circ"></span>；北京 <span class="imath" data-tex="116.4074^\circ"></span> 属第 20 带，中央经线 <span class="imath" data-tex="117^\circ"></span>。中国预设中心 104.3° 属第 18 带，中央经线 105°——与阿尔伯斯惯例的 105°E 正好一致。</p>
+
+    <h3 id="s4-2">4.2 标准纬线：向内 1/6</h3>
+    <p>圆锥投影的双标准纬线取区域纬度范围向内各 1/6，这是教学惯例：标准纬线落在图幅内部，避免把变形集中到图边。</p>
+
+    <div class="formula" data-tex="\varphi_1=\varphi_{\min}+\frac{\Delta\varphi}{6},\qquad \varphi_2=\varphi_{\max}-\frac{\Delta\varphi}{6}" data-no="7"></div>
+
+    <p>结果四舍五入到 0.1°。中国全图若按此式会得到 12.1°N / 45.3°N，但阿尔伯斯命中中国范围时改用固定惯例参数，不再使用内插值。</p>
+
+    <h3 id="s4-3">4.3 中国全图惯例</h3>
+    <p>中国全图（含南海诸岛）且投影为阿尔伯斯时，参数固定为：</p>
+
+    <div class="formula" data-tex="(\lambda_0,\ \varphi_1,\ \varphi_2,\ \varphi_0)=(105^\circ,\ 25^\circ,\ 47^\circ,\ 0^\circ)" data-no="8"></div>
+
+    <p>判定使用与规则引擎同一个 <code>isChinaExtent</code> 口径，避免“推荐说命中中国、参数却用内插值”的分裂。兰伯特等角圆锥不走这条特例，仍按区域中心与向内 1/6 计算。</p>
+
+    <h3 id="s4-4">4.4 各投影的有效参数规则</h3>
+    <table>
+      <caption>表 10 · <code>effectiveParams()</code> 的分支</caption>
+      <thead><tr><th>投影</th><th>中央经线</th><th>标准纬线</th><th>原点纬度</th></tr></thead>
+      <tbody>
+        <tr><td>阿尔伯斯等积圆锥</td><td>中国范围 105°，否则中心经度</td><td>中国 [25, 47]，否则向内 1/6</td><td>中国 0，否则中心纬度</td></tr>
+        <tr><td>兰伯特等角圆锥</td><td>中心经度</td><td>向内 1/6</td><td>中心纬度</td></tr>
+        <tr><td>横轴墨卡托 / 高斯-克吕格</td><td>6° 带中央经线</td><td>—</td><td>0</td></tr>
+        <tr><td>极地立体</td><td>中心经度</td><td>—</td><td>+90° 或 −90°</td></tr>
+        <tr><td>等距圆柱</td><td>中心经度</td><td>[中心纬度]</td><td>0</td></tr>
+        <tr><td>高尔-彼得斯</td><td>中心经度</td><td>[45°]</td><td>0</td></tr>
+        <tr><td>其余（墨卡托、方位类、伪圆柱、折中）</td><td>中心经度</td><td>—</td><td>中心纬度</td></tr>
+      </tbody>
+    </table>
+
+    <p>注意“有效参数”与“知识库典型参数”是两回事：<code>typicalParams</code> 是条目自带的示例值（例如墨卡托的 <code>[0]</code>、阿尔伯斯的 105/25/47），用于说明与 AI 候选；预览、参数文案、PROJ4、WKT、坐标试算全部使用 <code>effectiveParams</code>，保证同一页面上的图、字、导出、计算四者一致。</p>
+
+    <h3 id="s4-5">4.5 PROJ4：单一事实源</h3>
+    <p>导出与试算共用 <code>buildProj4()</code> 生成的同一份字符串。这是本项目最重要的一致性约束：用户在 ArcGIS Pro / 超图里粘贴的参数，与页面坐标试算的结果必须来自同一个定义。</p>
+
+    <pre><code>// 中国全图 · 阿尔伯斯
++proj=aea +lat_1=25 +lat_2=47 +lat_0=0 +lon_0=105 \
++datum=WGS84 +units=m +no_defs
+
+// 北京 · 高斯-克吕格（6° 带）
++proj=tmerc +lat_0=0 +lon_0=117 +k=1 \
++x_0=500000 +y_0=0 +datum=WGS84 +units=m +no_defs</code></pre>
+
+    <p>横轴墨卡托固定假东 500 km（<code>+x_0=500000</code>），避免带内横坐标出现负值；墨卡托固定 <code>+lat_ts=0</code>；极地立体按南北半球取 <code>+lat_0=+90</code> 或 <code>+lat_0=-90</code>；折中与伪圆柱类只保留中央经线与基准。</p>
+
+    <h3 id="s4-6">4.6 WKT2 与 EPSG 方法编号</h3>
+    <p>WKT 输出为 <code>PROJCRS</code>，基准段固定 WGS84，坐标轴为 east / north、单位米。有标准方法的投影写入 EPSG 方法 ID；折中 / 教学类只写方法名，不伪造编号。</p>
+
+    <table>
+      <caption>表 11 · WKT2 中使用的方法编号</caption>
+      <thead><tr><th>投影</th><th>方法名</th><th>EPSG 方法 ID</th></tr></thead>
+      <tbody>
+        <tr><td>阿尔伯斯等积圆锥</td><td>Albers Equal Area</td><td>9822</td></tr>
+        <tr><td>兰伯特等角圆锥（2SP）</td><td>Lambert Conic Conformal (2SP)</td><td>9802</td></tr>
+        <tr><td>墨卡托（variant A）</td><td>Mercator (variant A)</td><td>9804</td></tr>
+        <tr><td>横轴墨卡托</td><td>Transverse Mercator</td><td>9807</td></tr>
+        <tr><td>极地立体（variant A）</td><td>Polar Stereographic (variant A)</td><td>9810</td></tr>
+        <tr><td>兰伯特方位等积</td><td>Lambert Azimuthal Equal Area</td><td>9820</td></tr>
+        <tr><td>方位等距</td><td>Modified Azimuthal Equidistant</td><td>9832</td></tr>
+        <tr><td>等距圆柱</td><td>Equidistant Cylindrical</td><td>9823</td></tr>
+        <tr><td>圆柱等积（高尔-彼得斯）</td><td>Cylindrical Equal Area</td><td>9835</td></tr>
+        <tr><td>罗宾逊、温克尔三重、摩尔魏特、正弦、正射、球心、自然地球、等地球</td><td>通用方法名</td><td>不写 ID</td></tr>
+      </tbody>
+    </table>
+
+    <p>EPSG 提示同样是“有则给、无则明说”：知识库条目带 <code>epsgHint</code> 时直接展示；没有时统一提示“无直接对应（自定义参数），请复制 PROJ4 或 WKT 导入 ArcGIS Pro / 超图 GIS”。高斯-克吕格给的是分带系列提示（CGCS2000 6° 带 EPSG:4491–4501、3° 带 EPSG:4513–4533），不假装存在一个“万能编号”。</p>
+
+    <h3 id="s4-7">4.7 坐标试算与往返误差</h3>
+    <p>试算用 proj4js 正算 / 反算，输入输出与导出定义完全一致。误差定义为经纬度两分量中的较大者：</p>
+
+    <div class="formula" data-tex="\varepsilon=\max\left(\left|\hat{\lambda}-\lambda\right|,\ \left|\hat{\varphi}-\varphi\right|\right)" data-no="9"></div>
+
+    <table>
+      <caption>表 12 · 已执行的往返测试（2026-10-21）</caption>
+      <thead><tr><th>投影</th><th>输入点</th><th>正算结果 (m)</th><th>往返误差</th></tr></thead>
+      <tbody>
+        <tr><td>中国阿尔伯斯</td><td>116.4°E, 39.9°N</td><td>X 956 439.2 / Y 4 343 540.0</td><td><span class="imath" data-tex="7.11\times10^{-15}\,^{\circ}"></span></td></tr>
+        <tr><td>北京高斯-克吕格</td><td>116.4°E, 39.9°N</td><td>X 448 688.9 / Y 4 418 598.0</td><td><span class="imath" data-tex="1.42\times10^{-14}\,^{\circ}"></span></td></tr>
+        <tr><td>墨卡托</td><td>120°E, 30°N</td><td>X 1 747 716.0 / Y 3 482 189.1</td><td><span class="imath" data-tex="5.44\times10^{-13}\,^{\circ}"></span></td></tr>
+        <tr><td>北极方位等距</td><td>0°, 75°N</td><td>X 0.0 / Y −368 390.6</td><td><span class="imath" data-tex="1.51\times10^{-11}\,^{\circ}"></span></td></tr>
+        <tr><td>极地立体</td><td>30°E, 80°N</td><td>X 559 834.6 / Y −969 661.9</td><td><span class="imath" data-tex="5.68\times10^{-13}\,^{\circ}"></span></td></tr>
+      </tbody>
+    </table>
+
+    <p>proj4js 不支持的投影不做假计算：转换函数捕获异常并返回 <code>null</code>，界面显示“该投影暂不支持坐标试算”。实测温克尔三重走这条分支；其余投影以运行时能力为准，不预先承诺。</p>

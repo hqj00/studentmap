@@ -1,0 +1,215 @@
+    <h2 id="s7">7. 符号设计链路</h2>
+
+    <h3 id="s7-1">7.1 五步向导与数据模型</h3>
+    <p>符号设计向导把课程要求拆成五步，一次只展示一步；前置条件不满足时不能进入下一步。五步是：需求定义 → iconfont AI 素材 → Illustrator 精修 → 上传与校验 → 入库。第 2、3 步是外部工具操作，本应用只提供描述词、操作清单与承接入口。</p>
+
+    <pre><code>type SymbolCategory = 'point' | 'line' | 'area'
+type SymbolSource =
+  | 'iconfont-ai' | 'iconify' | 'illustrator' | 'other'
+
+interface SymbolRecord {
+  id: string          // 时间戳 36 进制 + 随机后缀
+  name: string
+  category: SymbolCategory
+  tags: string[]
+  svg: string         // 已通过规范化校验的 SVG 文本
+  source: SymbolSource
+  createdAt: number
+}</code></pre>
+
+    <p>符号库存于 <code>localStorage</code> 的 <code>studentmap.symbols.v1</code>。五步向导与智能符号页共享同一个 store，因此从任一入口入库的符号都会出现在两处。新增记录时 id 由时间戳与随机数组成，避免同一毫秒内连续入库冲突。</p>
+
+    <h3 id="s7-2">7.2 描述词模板</h3>
+    <p>第 2 步把第 1 步的地物名称与风格拼成固定模板，减少学生自由发挥导致的素材质量波动：</p>
+
+    <div class="formula" data-tex="P=N\ \text{地图符号，}S\text{，单色，几何简洁，居中构图，无文字}" data-no="23"></div>
+
+    <p>其中 <span class="imath" data-tex="N"></span> 是地物名称（空时用“某”），<span class="imath" data-tex="S"></span> 是风格（线性 / 面性 / 剪影）。模板刻意限定单色、几何简洁、居中、无文字，与后续 Illustrator 清单（64×64 画板、2–4px 线宽、转曲、内联样式）对齐。</p>
+
+    <h3 id="s7-3">7.3 SVG 规范化校验</h3>
+    <p>校验器 <code>checkAndNormalizeSvg()</code> 是符号入库的唯一安全入口。它返回 <code>ok</code>、问题清单与规范化后的 SVG；错误级问题阻止入库，警告级问题只提示回 Illustrator 修正，建议级问题不影响入库。</p>
+
+    <table>
+      <caption>表 18 · SVG 校验规则</caption>
+      <thead><tr><th>检查项</th><th>判定</th><th>级别</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>可解析</td><td>DOMParser 报 parsererror，或根元素为空</td><td>错误</td><td>拒绝，提示确认是矢量 SVG 而非位图改名</td></tr>
+        <tr><td>根元素</td><td>不是 <code>&lt;svg&gt;</code></td><td>错误</td><td>拒绝</td></tr>
+        <tr><td>禁止元素</td><td>含 <code>&lt;script&gt;</code> 或 <code>&lt;foreignObject&gt;</code></td><td>错误</td><td>拒绝，提示安全风险</td></tr>
+        <tr><td>外部引用</td><td>任一元素的 <code>href</code> / <code>xlink:href</code> 以 <code>http://</code> 或 <code>https://</code> 开头</td><td>错误</td><td>拒绝，符号必须离线可用</td></tr>
+        <tr><td>未转曲文字</td><td>含 <code>&lt;text&gt;</code></td><td>警告</td><td>提示回 Illustrator 执行“文字 → 创建轮廓”</td></tr>
+        <tr><td>viewBox</td><td>缺失，且 width / height 可解析为正数</td><td>警告</td><td>自动补全为 <code>0 0 w h</code></td></tr>
+        <tr><td>viewBox</td><td>缺失，且无法从 width / height 推导</td><td>错误</td><td>拒绝，缩放会失真</td></tr>
+        <tr><td>画板比例</td><td>viewBox 宽高不相等</td><td>警告</td><td>建议 64×64 基准正方形画板</td></tr>
+        <tr><td>线宽</td><td>出现两种及以上 stroke-width</td><td>警告</td><td>同组符号线宽应统一（建议 2–4px）</td></tr>
+        <tr><td>线宽</td><td>最小线宽小于 0.5px</td><td>警告</td><td>缩放后不清晰</td></tr>
+        <tr><td>配色</td><td>填充色超过 3 种</td><td>警告</td><td>地图符号用色应克制</td></tr>
+        <tr><td>换色</td><td>没有 <code>currentColor</code> 且填充色多于 1 种</td><td>建议</td><td>单体符号建议单色，便于整体换色</td></tr>
+        <tr><td>体积</td><td>序列化后超过 512 KB</td><td>警告</td><td>建议精简锚点后重新导出</td></tr>
+      </tbody>
+    </table>
+
+    <p>入库判定可以写成一个简单谓词：</p>
+
+    <div class="formula" data-tex="\mathrm{ok}=\neg\exists\,i\in\mathrm{issues}:\ i.\mathrm{level}=\text{error}" data-no="24"></div>
+
+    <p>自动修正只做一件事：缺 viewBox 时按数值型 width / height 补全。它不会删除脚本、不会重写路径、不会把文字转曲——这些必须回设计工具处理，避免“校验器悄悄改图”导致学生交上去的符号与预览不一致。</p>
+
+    <h3 id="s7-4">7.4 Iconify 检索与中文词库</h3>
+    <p>iconfont 没有公开搜索 API（2026-10 实测：<code>/api/icon/search.json</code> 返回站点 HTML 壳，带反爬组件），因此应用内搜索改用 Iconify 公共 API。它免密钥、CORS 开放，静态托管也能直接用。</p>
+
+    <pre><code>GET https://api.iconify.design/search?query=gas%20station&amp;limit=48
+GET https://api.iconify.design/tabler/gas-station.svg</code></pre>
+
+    <p>中文描述先经过本地词库转换：命中词条返回英文检索词；未命中则原样搜索，并提示“可换用地物名词”。</p>
+
+    <div class="formula" data-tex="q(d)=\begin{cases}\mathrm{dict}(d),&amp;\exists k\in\mathrm{dict}:\ k\subseteq d\\ d,&amp;\text{otherwise}\end{cases}" data-no="25"></div>
+
+    <p>词库 35 条常见地物（加油站、医院、学校、银行、车站、火车站、机场、公园、商场、超市、酒店、餐厅、咖啡、邮局、书店、图书馆、博物馆、体育馆、药店、警局、消防、停车场、厕所、景区、桥、隧道、水库、工厂、教堂、寺庙、气象台、地铁、灯塔、港口、长城）。匹配按对象顺序取第一个命中，因此存在子串关系时以先出现者为准：例如“火车站”会先命中“车站”。这是词库顺序的已知行为，不是搜索失败；需要精确结果时直接输入英文检索词。</p>
+
+    <p>候选网格用 <code>&lt;img&gt;</code> 直引 SVG URL，点选后才拉取 SVG 文本做校验。这样浏览 48 个候选不会触发 48 次完整下载与解析，只有在“真的要入库”时才付出校验成本。</p>
+
+    <h3 id="s7-5">7.5 入库、导入与合并</h3>
+    <p>导入他人分享的符号库 JSON 时，不能信任文件内容。流程是：JSON 解析 → 必须是数组 → 逐条检查字段完整性 → 对每条 SVG 重新执行 <code>checkAndNormalizeSvg</code> → 跳过错误记录 → 按 id 去重 → 合并。</p>
+
+    <div class="formula" data-tex="L'=L\ \Vert\ \{\,r\in R_{\mathrm{valid}}\mid \mathrm{id}(r)\notin\mathrm{ids}(L)\,\}" data-no="26"></div>
+
+    <p>返回结果包含 <code>added</code> 与 <code>skipped</code> 两个计数：跳过包括字段缺失、SVG 校验失败、id 重复三类。非法 JSON 或非数组直接失败，原库不改动。导入时重新校验 SVG 是必要的——分享文件可能被手工编辑过，不能因为“它来自本应用”就跳过安全入口。</p>
+
+    <h3 id="s7-6">7.6 安全边界</h3>
+    <p>符号缩略图用 <code>v-html</code> 渲染，因此只允许通过校验的 SVG 进入这个通道。校验器拦截脚本元素、<code>foreignObject</code> 与外部 http(s) 引用，能挡住最常见的 XSS 与“离线符号偷偷联网”两类问题。</p>
+    <p>但这不是完整的 SVG 白名单过滤：事件属性（如 <code>onload</code>）、<code>javascript:</code> 伪协议、CSS <code>url()</code> 等并未逐项剥离。课程场景默认符号来源可信（自己设计、Iconify 开源图标、同学分享），导入陌生人文件前应自行确认来源。若未来面向公网收集符号，需要补一层严格的白名单/消毒库，而不是继续加正则。</p>
+
+    <h2 id="s8">8. 账号与云端同步</h2>
+
+    <h3 id="s8-1">8.1 CloudBase 注册三步</h3>
+    <p>新版 CloudBase 不允许“用户名 + 密码”直接注册，注册必须走邮箱验证码三步：</p>
+
+    <pre><code>const v = await auth.getVerification({ email })
+const { verification_token } = await auth.verify({
+  verification_id: v.verification_id,
+  verification_code: code,
+})
+await auth.signUp({
+  email, verification_code: code, verification_token, password,
+  name, ...(username ? { username } : {}),
+})</code></pre>
+
+    <p>注册成功后 SDK 自动登录。登录用 <code>auth.signIn({ username, password })</code>，username 可填邮箱、用户名或学号（前端已归一化）。登录态由 SDK 存在 localStorage，长期免登。</p>
+
+    <h3 id="s8-2">8.2 账号归一化</h3>
+    <p>服务端对用户名有强制正则：<code>^[a-z][0-9a-z_-]{5,24}$</code>。中文、大写开头、纯数字都会被拒。前端在注册与登录两侧做同一转换：</p>
+
+    <div class="formula" data-tex="u'=\begin{cases}\text{“s”}+u,&amp;u\ \text{为纯数字}\\ u,&amp;\text{otherwise}\end{cases}\qquad u=\mathrm{lower}(\mathrm{trim}(\text{input}))" data-no="27"></div>
+
+    <p>因此学号 <code>20230101</code> 注册时实际用户名是 <code>s20230101</code>，登录时输入 <code>20230101</code> 也会转成同一个值，学生无感。用户名是可选字段：只填邮箱也能注册，之后用邮箱登录；填了用户名，则邮箱与用户名指向同一个 uid。</p>
+
+    <h3 id="s8-3">8.3 数据模型与权限</h3>
+    <p>集合 <code>symbol_libraries</code>，一个用户一条文档，<code>_id = uid</code>：</p>
+
+    <pre><code>{
+  "owner": "&lt;uid&gt;",
+  "symbols": [ SymbolRecord, ... ],
+  "updatedAt": 1718000000000
+}</code></pre>
+
+    <p>权限选“读取和修改本人数据 [PRIVATE]”，由数据库安全规则保证学生之间互不可见。前端通过 <code>@cloudbase/js-sdk</code> 直连，SDK 设计为公开调用，前端不持有密钥；真正的隔离在服务端规则，不在前端代码。</p>
+
+    <h3 id="s8-4">8.4 合并与防抖同步</h3>
+    <p>登录成功时，先拉取云端库，与本地库按 id 取并集，云端优先，然后把合并结果写回本地并推送云端：</p>
+
+    <div class="formula" data-tex="L_{\mathrm{merged}}=R\ \Vert\ \{\,l\in L\mid \mathrm{id}(l)\notin\mathrm{ids}(R)\,\}" data-no="28"></div>
+
+    <p>此后每次变更（入库、删除、导入）立即写 localStorage；若已登录，则防抖 800ms 后推送整个库：</p>
+
+    <div class="formula" data-tex="t_{\mathrm{push}}=\max\left(t_{\mathrm{change}}\right)+800\ \mathrm{ms}" data-no="29"></div>
+
+    <p>用 <code>set</code> 做 upsert，整库覆盖而不是增量合并。对单用户单文档的规模，这比维护增量日志简单且不会出现“删了又回来”的合并冲突。推送失败被捕获，不打扰本地使用；下次变更会再次尝试。</p>
+
+    <h3 id="s8-5">8.5 失败与降级</h3>
+    <table>
+      <caption>表 19 · 云端失败时的行为</caption>
+      <thead><tr><th>场景</th><th>行为</th><th>用户可见</th></tr></thead>
+      <tbody>
+        <tr><td>未配置 <code>VITE_TCB_ENV</code></td><td>纯本地模式，不加载 SDK</td><td>登录页提示“当前部署未配置云端环境”</td></tr>
+        <tr><td>登录成功、拉取失败</td><td>保留本地库，不推送</td><td>符号库正常使用，无阻塞</td></tr>
+        <tr><td>推送失败</td><td>捕获异常，localStorage 已写入</td><td>无提示或轻提示，不丢本地数据</td></tr>
+        <tr><td>未登录</td><td>只写 localStorage</td><td>页头显示“登录云账号”</td></tr>
+        <tr><td>退出登录</td><td>清空登录态，保留本地库</td><td>提示“符号库保留在本机”</td></tr>
+        <tr><td>安全域名未配置</td><td>浏览器报 <code>Failed to fetch</code></td><td>需要在 CloudBase 控制台添加 Pages 域名</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="s9">9. AI 通道与职责边界</h2>
+
+    <h3 id="s9-1">9.1 三类调用，一个端点</h3>
+    <p>推荐、教学助手、地图学问答共用 AI 代理的 <code>POST /ai/recommend</code>。代理本身不区分业务，只做 OpenAI 兼容转发；区别全在 system prompt 与输出契约。</p>
+
+    <table>
+      <caption>表 20 · 三类 AI 调用</caption>
+      <thead><tr><th>功能</th><th>输入</th><th>输出契约</th><th>失败落点</th></tr></thead>
+      <tbody>
+        <tr><td>投影推荐</td><td>区域描述、用途、规则候选、知识库摘要</td><td><code>{"recommendations":[{id, reason, params?}]}</code></td><td>规则结果</td></tr>
+        <tr><td>教学助手</td><td>用户指令 + 当前 LabState</td><td><code>{"reply":string,"actions":[...]}</code></td><td>离线指令解析</td></tr>
+        <tr><td>地图学问答</td><td>最近 10 条对话 + 助教 system prompt</td><td>纯文本</td><td>离线知识库</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s9-2">9.2 输出契约</h3>
+    <p>推荐只接受知识库内的 id；模型给出未知 id 时该条被丢弃，不会让前端渲染一个不存在的投影。模型给出的参数合并进 <code>typicalParams</code>，但如前所述，尚未进入 <code>effectiveParams</code>。</p>
+
+    <pre><code>{
+  "recommendations": [
+    { "id": "albers-equal-area-conic",
+      "reason": "中国全图统计专题：面积严格相等……",
+      "params": { "centralMeridian": 105,
+                  "standardParallels": [25, 47] } }
+  ]
+}</code></pre>
+
+    <p>教学助手的动作是白名单：<code>setRegion</code>、<code>setProjections</code>、<code>setOverlays</code>、<code>setMarker</code>、<code>reset</code>。未知识别、非法投影 id、越界经纬度在 <code>sanitizeActions</code> 与 <code>applyActions</code> 两层被丢弃；全部丢弃时按离线解析处理。</p>
+
+    <pre><code>{
+  "reply": "已切换到全球并对比墨卡托与等地球。",
+  "actions": [
+    { "type": "setRegion", "presetId": "world" },
+    { "type": "setProjections", "a": "mercator", "b": "equal-earth" },
+    { "type": "setOverlays", "tissot": true }
+  ]
+}</code></pre>
+
+    <h3 id="s9-3">9.3 JSON 容错解析</h3>
+    <p>模型偶尔会在 JSON 前后加解释文字或代码围栏。解析策略是：先找第一个 <code>{</code>，从那里截断；标准 JSON 解析失败时，再找最后一个 <code>}</code>，解析前缀；仍失败就抛错，由调用方降级。</p>
+
+    <div class="formula" data-tex="\begin{aligned}i_0&amp;=\min\{\,i\mid t_i=\text{“\{”}\,\}\\ j_1&amp;=\max\{\,j\mid t_j=\text{“\}”}\,\}\quad(\text{仅当首次解析失败})\end{aligned}" data-no="30"></div>
+
+    <p>这不是“宽容解析器”，只是对付尾随文字的最小容错。真正的合法性仍由 JSON.parse 与后续 schema 校验决定；解析成功但结构不对，同样降级。</p>
+
+    <h3 id="s9-4">9.4 超时预算</h3>
+    <p>慢模型与中转站的首字可能超过 60 秒，因此超时不是“几秒”，而是一条分层预算：前端等 125 秒，代理等上游 115 秒，前端必须比代理长，才能在代理返回 504 之前拿到结构化错误。</p>
+
+    <div class="formula" data-tex="T_{\mathrm{front}}=125\ \mathrm{s}\ &gt;\ T_{\mathrm{proxy}}=115\ \mathrm{s},\qquad T_{\mathrm{SCF}}\ge120\ \mathrm{s}" data-no="31"></div>
+
+    <table>
+      <caption>表 21 · 超时与执行环境</caption>
+      <thead><tr><th>层</th><th>值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>前端 fetch</td><td>125 s</td><td><code>AbortController</code>，覆盖慢模型首字</td></tr>
+        <tr><td>本地 / SCF 代理上游</td><td>115 s（<code>UPSTREAM_TIMEOUT</code> 可调）</td><td>超时返回 504，前端据此降级</td></tr>
+        <tr><td>SCF 执行超时</td><td>不少于 120 s</td><td>默认 3 s 不够；控制台需手动调大。若启用 429 退避重试，需更长</td></tr>
+      </tbody>
+    </table>
+
+    <h3 id="s9-5">9.5 职责边界</h3>
+    <table>
+      <caption>表 22 · 谁负责什么</caption>
+      <thead><tr><th>环节</th><th>AI</th><th>确定性代码</th></tr></thead>
+      <tbody>
+        <tr><td>投影推荐</td><td>在候选内排序、解释、给参数建议</td><td>规则候选、知识库过滤、参数计算、预览、导出</td></tr>
+        <tr><td>教学助手</td><td>把自然语言解析为受限动作</td><td>动作白名单、状态变更、撤销快照、边界校验</td></tr>
+        <tr><td>地图学问答</td><td>生成自然语言回答</td><td>上下文裁剪、超时、离线知识库兜底、来源标注</td></tr>
+        <tr><td>符号设计</td><td>不参与</td><td>校验、入库、合并、同步全部本地 / 云端确定性逻辑</td></tr>
+      </tbody>
+    </table>
+
+    <p>一句话：AI 负责“选、解释、听懂”，代码负责“算、校验、改状态”。任何让模型直接输出坐标、直接写库、直接执行动作的设计，都会把可验证性弄丢。</p>

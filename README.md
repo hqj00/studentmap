@@ -9,6 +9,14 @@
 
 需求、功能规格与架构图都在 **[spec/](spec/README.md)** 子文件夹中，先读 spec 再动代码。
 
+## 技术文档
+
+投影推荐规则、有效参数、d3 预览与图面整饰、符号校验、云端同步、验证结果与部署排错，汇总在单文件技术文档中（公式已预渲染，离线可读）：
+
+- 源文件：`docs/parts/` + `docs/doc.css`
+- 生成：`node docs/gen-doc.mjs`
+- 产物：`public/docs/studentmap-technical.html`，部署后访问 `https://hqj00.github.io/studentmap/docs/studentmap-technical.html`
+
 ## 快速开始
 
 ```bash
