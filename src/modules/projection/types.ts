@@ -30,6 +30,17 @@ export type ProjectionCategory =
 
 export type DistortionProperty = 'conformal' | 'equal-area' | 'equidistant' | 'compromise'
 
+/** 投影面摆放姿态（spec/09 §2.3）：正轴 / 横轴 / 斜轴 */
+export type ProjectionAspect = 'normal' | 'transverse' | 'oblique'
+
+/** 中国全图适用性标注（spec/09 §2.4） */
+export type ChinaFitLevel = 'fit' | 'conditional' | 'unsuitable'
+
+export interface ChinaFit {
+  level: ChinaFitLevel
+  reason: string
+}
+
 export interface ProjectionParams {
   centralMeridian?: number
   standardParallels?: number[]
@@ -81,6 +92,24 @@ export const PROPERTY_LABELS: Record<DistortionProperty, string> = {
   'equal-area': '等积',
   equidistant: '等距',
   compromise: '折中（任意）',
+}
+
+export const ASPECT_LABELS: Record<ProjectionAspect, string> = {
+  normal: '正轴',
+  transverse: '横轴',
+  oblique: '斜轴',
+}
+
+export const ASPECT_HINTS: Record<ProjectionAspect, string> = {
+  normal: '正轴：投影面轴与地轴重合（圆柱/圆锥直立，或方位面位于极点）',
+  transverse: '横轴：投影面轴与地轴垂直（横轴圆柱、赤道为中心的方位投影）',
+  oblique: '斜轴：投影面轴与地轴斜交（以任意中纬点为中心的方位投影）',
+}
+
+export const CHINA_FIT_LABELS: Record<ChinaFitLevel, string> = {
+  fit: '适合中国',
+  conditional: '有条件适合',
+  unsuitable: '不适合中国',
 }
 
 export const CATEGORY_LABELS: Record<ProjectionCategory, string> = {

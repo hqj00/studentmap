@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { PROJECTION_KB, REGION_PRESETS } from '@/modules/projection/presets'
-import { PROPERTY_LABELS, CATEGORY_LABELS } from '@/modules/projection/types'
-import type { DistortionProperty, ProjectionCategory, ProjectionInfo, RegionExtent } from '@/modules/projection/types'
+import { PROJECTION_KB, REGION_PRESETS, CHINA_SUITABILITY } from '@/modules/projection/presets'
+import { PROPERTY_LABELS, CATEGORY_LABELS, ASPECT_LABELS, ASPECT_HINTS, CHINA_FIT_LABELS } from '@/modules/projection/types'
+import type {
+  ChinaFitLevel,
+  DistortionProperty,
+  ProjectionAspect,
+  ProjectionCategory,
+  ProjectionInfo,
+  RegionExtent,
+} from '@/modules/projection/types'
 import {
   buildPreviewLayers,
   buildPreviewDecorations,
@@ -32,10 +39,14 @@ const REGION_GROUPS: RegionGroupDef[] = [
   { key: 'world', title: '世界地图投影', extent: WORLD, clip: false },
 ]
 
-/** 分类筛选（spec/07 §2.4）：投影面类别 × 变形性质 */
+/** 模块选择框（spec/09 §2.2）：同一时间只看一个成图区域的 18 幅 */
+const moduleView = ref<'china' | 'world'>('china')
+
+/** 分类筛选（spec/07 §2.4 + spec/09 §2.3）：投影面类别 × 变形性质 × 摆放姿态 */
 const filter = reactive({
   category: 'all' as 'all' | ProjectionCategory,
   property: 'all' as 'all' | DistortionProperty,
+  aspect: 'all' as 'all' | ProjectionAspect,
 })
 const categoryOptions = [
   { value: 'all', label: '全部类别' },
@@ -44,6 +55,10 @@ const categoryOptions = [
 const propertyOptions = [
   { value: 'all', label: '全部性质' },
   ...Object.entries(PROPERTY_LABELS).map(([value, label]) => ({ value, label })),
+]
+const aspectOptions = [
+  { value: 'all', label: '全部姿态' },
+  ...Object.entries(ASPECT_LABELS).map(([value, label]) => ({ value, label })),
 ]
 
 /** 按坐标查看（spec/07 §2.4）：输入中心经纬度，缩略图定向到该点并给出规则结论 */
@@ -72,14 +87,28 @@ const coordExtent = computed<RegionExtent>(() => ({
 const fmtLon = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'E' : 'W'}`
 const fmtLat = (v: number) => `${Math.abs(v)}°${v >= 0 ? 'N' : 'S'}`
 
-/** 筛选后的投影列表：两个模块共用同一份（每种投影在中国、世界各出现一次） */
-const filtered = computed(() =>
-  PROJECTION_KB.filter(
+/**
+ * 摆放姿态（spec/09 §2.3）：按该幅图的实际定向判定——
+ * 方位投影看投影中心纬度（|φ|≥60° 正轴/极地，≤20° 横轴/赤道，其余斜轴）；
+ * 横轴墨卡托为横轴；其余圆柱/圆锥/伪圆柱/折中类均为正轴。
+ */
+function aspectOf(info: ProjectionInfo, extent: RegionExtent): ProjectionAspect {
+  if (info.category !== 'azimuthal') return info.id === 'transverse-mercator' ? 'transverse' : 'normal'
+  const absLat = Math.abs(effectiveParams(info, extent).originLat)
+  return absLat >= 60 ? 'normal' : absLat <= 20 ? 'transverse' : 'oblique'
+}
+
+/** 筛选后的投影列表（姿态依赖成图区域，逐幅判定） */
+const filtered = computed(() => {
+  const def = REGION_GROUPS.find((g) => g.key === moduleView.value)!
+  const extent = coordValid.value ? coordExtent.value : def.extent
+  return PROJECTION_KB.filter(
     (info) =>
       (filter.category === 'all' || info.category === filter.category) &&
-      (filter.property === 'all' || info.property === filter.property),
-  ),
-)
+      (filter.property === 'all' || info.property === filter.property) &&
+      (filter.aspect === 'all' || aspectOf(info, extent) === filter.aspect),
+  )
+})
 
 interface Card {
   info: ProjectionInfo
@@ -96,11 +125,15 @@ interface Card {
   markerPt: [number, number] | null
   /** 缩略图副标题（成图范围说明） */
   scopeNote: string
+  /** 投影面摆放姿态（spec/09 §2.3） */
+  aspect: ProjectionAspect
+  /** 中国全图适用性（仅中国模块，spec/09 §2.4） */
+  chinaFit?: { level: ChinaFitLevel; reason: string }
   rule?: { hit: boolean; text: string }
   paramsText?: string
 }
 
-/** 按模块区域渲染一张缩略图卡片；按坐标查看时两模块统一用坐标范围（spec/07 §2.4） */
+/** 按模块区域渲染一张缩略图卡片；按坐标查看时模块区域统一换成坐标范围（spec/07 §2.4） */
 function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
   const extent = coordValid.value ? coordExtent.value : def.extent
   const clip = !coordValid.value && def.clip
@@ -126,6 +159,8 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
       : def.key === 'china'
         ? '中国全图（含南海诸岛）'
         : (worldDisplayNote(info) ?? '世界全图'),
+    aspect: aspectOf(info, extent),
+    chinaFit: def.key === 'china' ? CHINA_SUITABILITY[info.id] : undefined,
   }
   if (coordValid.value) {
     card.rule = suitabilityAt(info, coord.lat)
@@ -141,14 +176,12 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
   return card
 }
 
-/** 分组（spec/09 §2.2）：每个模块都是同 18 种投影，只是成图区域不同；筛选为空时整组隐藏 */
-const groups = computed(() =>
-  REGION_GROUPS.map((def) => ({
-    key: def.key,
-    title: def.title,
-    items: filtered.value.map((info) => buildCard(info, def)),
-  })),
-)
+/** 当前模块的卡片列表（spec/09 §2.2） */
+const currentDef = computed(() => REGION_GROUPS.find((g) => g.key === moduleView.value)!)
+const currentItems = computed(() => filtered.value.map((info) => buildCard(info, currentDef.value)))
+
+const fitTagType = (level: ChinaFitLevel) =>
+  level === 'fit' ? 'success' : level === 'conditional' ? 'warning' : 'danger'
 
 /** 比例尺（spec/09 §3.3）：取最接近约 52px 的整千米数；zoom 为当前缩放倍率，任意级别下长度重算仍正确 */
 const SCALE_KM = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
@@ -180,11 +213,19 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
 
 <template>
   <div class="gallery-controls">
+    <!-- 模块选择框（spec/09 §2.2）：选择看中国投影或世界投影 -->
+    <el-radio-group v-model="moduleView" class="ctl-module">
+      <el-radio-button value="china">中国地图投影</el-radio-button>
+      <el-radio-button value="world">世界地图投影</el-radio-button>
+    </el-radio-group>
     <el-select v-model="filter.category" class="ctl-select">
       <el-option v-for="o in categoryOptions" :key="o.value" :value="o.value" :label="o.label" />
     </el-select>
     <el-select v-model="filter.property" class="ctl-select">
       <el-option v-for="o in propertyOptions" :key="o.value" :value="o.value" :label="o.label" />
+    </el-select>
+    <el-select v-model="filter.aspect" class="ctl-select ctl-aspect">
+      <el-option v-for="o in aspectOptions" :key="o.value" :value="o.value" :label="o.label" />
     </el-select>
     <el-checkbox v-model="coord.enabled" class="ctl-coord">按坐标查看</el-checkbox>
     <el-checkbox v-model="allowMove" class="ctl-move">允许拖动</el-checkbox>
@@ -192,101 +233,108 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
       <el-input-number v-model="coord.lon" :min="-180" :max="180" :step="1" placeholder="经度" class="ctl-num" />
       <el-input-number v-model="coord.lat" :min="-90" :max="90" :step="1" placeholder="纬度" class="ctl-num" />
     </template>
-    <span class="ctl-count">符合筛选：{{ filtered.length }} / 18（每个模块）</span>
+    <span class="ctl-count">符合筛选：{{ currentItems.length }} / 18</span>
   </div>
   <p v-if="coord.enabled && !coordValid" class="ctl-warn">请填写合法中心坐标（经度 -180~180，纬度 -90~90）</p>
 
-  <template v-for="g in groups" :key="g.key">
-    <section v-if="g.items.length" class="gallery-group">
-      <h3 class="group-title">
-        {{ g.title }}<span class="group-count">· {{ g.items.length }} 幅</span>
-      </h3>
-      <div class="gallery-grid">
-        <div v-for="c in g.items" :key="c.info.id" class="gallery-item">
-          <div class="item-head">
-            <span class="item-no">{{ c.no }}</span>
-            <div class="item-names">
-              <b>{{ c.info.zhName }}</b>
-              <span class="item-en">{{ c.info.name }}</span>
-            </div>
+  <section class="gallery-group">
+    <h3 class="group-title">
+      {{ currentDef.title }}<span class="group-count">· {{ currentItems.length }} 幅</span>
+    </h3>
+    <p v-if="!currentItems.length" class="ctl-warn">当前筛选在该模块下没有匹配的投影，请调整筛选条件。</p>
+    <div v-else class="gallery-grid">
+      <div v-for="c in currentItems" :key="c.info.id" class="gallery-item">
+        <div class="item-head">
+          <span class="item-no">{{ c.no }}</span>
+          <div class="item-names">
+            <b>{{ c.info.zhName }}</b>
+            <span class="item-en">{{ c.info.name }}</span>
           </div>
-          <p class="item-tags">
-            <el-tag size="small">{{ CATEGORY_LABELS[c.info.category] }}</el-tag>
-            <el-tag size="small" type="warning">{{ PROPERTY_LABELS[c.info.property] }}</el-tag>
-          </p>
-          <ZoomableMap
-            :width="W"
-            :height="H"
-            :movable="allowMove"
-            :label="`${c.info.zhName}${c.scopeNote}（可缩放）`"
-          >
-            <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
-            <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
-            <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
-            <!-- 经纬网标注（spec/09 §3.1）：随图面缩放的地图内容 -->
-            <text
-              v-for="(t, i) in c.gratLabels"
-              :key="`g${i}`"
-              :x="t.x"
-              :y="t.y"
-              :text-anchor="t.anchor"
-              class="grat-label"
-            >
-              {{ t.text }}
-            </text>
-            <path v-if="c.extentD" :d="c.extentD" v-bind="PREVIEW_STYLE.extent" />
-            <path v-for="(d, i) in c.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
-            <!-- 坐标标记点：光晕 + 实心点（spec/07 §2.5） -->
-            <g v-if="c.markerPt">
-              <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="7" fill="rgba(230, 126, 34, 0.25)" />
-              <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="3" fill="#e67e22" stroke="#fff" stroke-width="1.2" />
-            </g>
-            <!-- 图面整饰（spec/09 §3）：指北针 / 比例尺 / 图例，不随缩放平移 -->
-            <template #overlay="{ scale }">
-              <g transform="translate(13 15)" class="north-arrow">
-                <text x="0" y="-7" text-anchor="middle" class="north-text">N</text>
-                <path d="M0,-5 L3.2,4.8 L0,2.4 L-3.2,4.8 Z" />
-              </g>
-              <g :transform="`translate(8 ${H - 9})`" class="scale-bar">
-                <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px / 2" height="2.6" class="sb-a" />
-                <rect
-                  :x="scaleBar(c.mmp, scale).px / 2"
-                  y="0"
-                  :width="scaleBar(c.mmp, scale).px / 2"
-                  height="2.6"
-                  class="sb-b"
-                />
-                <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px" height="2.6" class="sb-frame" />
-                <text :x="scaleBar(c.mmp, scale).px / 2" y="-2.5" text-anchor="middle" class="sb-text">
-                  {{ scaleBar(c.mmp, scale).km }} km
-                </text>
-                <text x="0" y="8" text-anchor="middle" class="sb-text">0</text>
-              </g>
-              <g :transform="`translate(${W - LEGEND_W - 4} ${H - legendH - 4})`" class="legend-box">
-                <rect width="56" :height="legendH" rx="2.5" class="lg-frame" />
-                <text x="4" y="7.5" class="lg-title">图例</text>
-                <g v-for="(r, i) in legendRows" :key="r.kind" :transform="`translate(0 ${11 + i * 8.5})`">
-                  <rect v-if="r.kind === 'land'" x="4" y="1.5" width="8" height="5" class="lg-land" />
-                  <line v-else-if="r.kind === 'grat'" x1="4" y1="4" x2="12" y2="4" class="lg-grat" />
-                  <rect v-else-if="r.kind === 'extent'" x="4" y="1.5" width="8" height="5" class="lg-extent" />
-                  <circle v-else-if="r.kind === 'tissot'" cx="8" cy="4" r="2.6" class="lg-tissot" />
-                  <circle v-else cx="8" cy="4" r="2" class="lg-marker" />
-                  <text x="15" y="6.5" class="lg-text">{{ r.text }}</text>
-                </g>
-              </g>
-            </template>
-          </ZoomableMap>
-          <template v-if="c.rule">
-            <p class="item-rule" :class="{ miss: !c.rule.hit }">
-              <b>{{ c.rule.hit ? '✓ 规则命中：' : '✗ 规则未命中：' }}</b>{{ c.rule.text }}
-            </p>
-            <p class="item-params"><b>参数：</b>{{ c.paramsText }}</p>
-          </template>
-          <p class="item-reason"><b>推荐缘由：</b>{{ c.info.suitableFor }}；{{ c.info.pros[0] }}</p>
         </div>
+        <p class="item-tags">
+          <el-tag size="small">{{ CATEGORY_LABELS[c.info.category] }}</el-tag>
+          <el-tag size="small" type="warning">{{ PROPERTY_LABELS[c.info.property] }}</el-tag>
+          <el-tag size="small" effect="plain" :title="ASPECT_HINTS[c.aspect]">{{ ASPECT_LABELS[c.aspect] }}</el-tag>
+          <el-tag v-if="c.chinaFit" size="small" :type="fitTagType(c.chinaFit.level)" :title="c.chinaFit.reason">
+            {{ CHINA_FIT_LABELS[c.chinaFit.level] }}
+          </el-tag>
+        </p>
+        <ZoomableMap
+          :width="W"
+          :height="H"
+          :movable="allowMove"
+          :label="`${c.info.zhName}${c.scopeNote}（可缩放）`"
+        >
+          <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
+          <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
+          <path :d="c.grat" v-bind="PREVIEW_STYLE.grat" />
+          <!-- 经纬网标注（spec/09 §3.1）：随图面缩放的地图内容 -->
+          <text
+            v-for="(t, i) in c.gratLabels"
+            :key="`g${i}`"
+            :x="t.x"
+            :y="t.y"
+            :text-anchor="t.anchor"
+            class="grat-label"
+          >
+            {{ t.text }}
+          </text>
+          <path v-if="c.extentD" :d="c.extentD" v-bind="PREVIEW_STYLE.extent" />
+          <path v-for="(d, i) in c.tissot" :key="i" :d="d" v-bind="PREVIEW_STYLE.tissot" />
+          <!-- 坐标标记点：光晕 + 实心点（spec/07 §2.5） -->
+          <g v-if="c.markerPt">
+            <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="7" fill="rgba(230, 126, 34, 0.25)" />
+            <circle :cx="c.markerPt[0]" :cy="c.markerPt[1]" r="3" fill="#e67e22" stroke="#fff" stroke-width="1.2" />
+          </g>
+          <!-- 图面整饰（spec/09 §3）：指北针 / 比例尺 / 图例，不随缩放平移 -->
+          <template #overlay="{ scale }">
+            <g transform="translate(13 15)" class="north-arrow">
+              <text x="0" y="-7" text-anchor="middle" class="north-text">N</text>
+              <path d="M0,-5 L3.2,4.8 L0,2.4 L-3.2,4.8 Z" />
+            </g>
+            <g :transform="`translate(8 ${H - 9})`" class="scale-bar">
+              <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px / 2" height="2.6" class="sb-a" />
+              <rect
+                :x="scaleBar(c.mmp, scale).px / 2"
+                y="0"
+                :width="scaleBar(c.mmp, scale).px / 2"
+                height="2.6"
+                class="sb-b"
+              />
+              <rect x="0" y="0" :width="scaleBar(c.mmp, scale).px" height="2.6" class="sb-frame" />
+              <text :x="scaleBar(c.mmp, scale).px / 2" y="-2.5" text-anchor="middle" class="sb-text">
+                {{ scaleBar(c.mmp, scale).km }} km
+              </text>
+              <text x="0" y="8" text-anchor="middle" class="sb-text">0</text>
+            </g>
+            <g :transform="`translate(${W - LEGEND_W - 4} ${H - legendH - 4})`" class="legend-box">
+              <rect width="56" :height="legendH" rx="2.5" class="lg-frame" />
+              <text x="4" y="7.5" class="lg-title">图例</text>
+              <g v-for="(r, i) in legendRows" :key="r.kind" :transform="`translate(0 ${11 + i * 8.5})`">
+                <rect v-if="r.kind === 'land'" x="4" y="1.5" width="8" height="5" class="lg-land" />
+                <line v-else-if="r.kind === 'grat'" x1="4" y1="4" x2="12" y2="4" class="lg-grat" />
+                <rect v-else-if="r.kind === 'extent'" x="4" y="1.5" width="8" height="5" class="lg-extent" />
+                <circle v-else-if="r.kind === 'tissot'" cx="8" cy="4" r="2.6" class="lg-tissot" />
+                <circle v-else cx="8" cy="4" r="2" class="lg-marker" />
+                <text x="15" y="6.5" class="lg-text">{{ r.text }}</text>
+              </g>
+            </g>
+          </template>
+        </ZoomableMap>
+        <!-- 中国全图适用性说明（spec/09 §2.4）：仅中国模块 -->
+        <p v-if="c.chinaFit" class="item-china-fit" :class="c.chinaFit.level">
+          <b>中国全图适用性 · {{ CHINA_FIT_LABELS[c.chinaFit.level] }}：</b>{{ c.chinaFit.reason }}
+        </p>
+        <template v-if="c.rule">
+          <p class="item-rule" :class="{ miss: !c.rule.hit }">
+            <b>{{ c.rule.hit ? '✓ 规则命中：' : '✗ 规则未命中：' }}</b>{{ c.rule.text }}
+          </p>
+          <p class="item-params"><b>参数：</b>{{ c.paramsText }}</p>
+        </template>
+        <p class="item-reason"><b>推荐缘由：</b>{{ c.info.suitableFor }}；{{ c.info.pros[0] }}</p>
       </div>
-    </section>
-  </template>
+    </div>
+  </section>
 </template>
 
 <style scoped>
@@ -297,8 +345,14 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
+.ctl-module {
+  margin-right: 4px;
+}
 .ctl-select {
   width: 150px;
+}
+.ctl-aspect {
+  width: 130px;
 }
 .ctl-coord,
 .ctl-move {
@@ -378,6 +432,21 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   margin: 8px 0 6px;
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+}
+.item-china-fit {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.item-china-fit.fit {
+  color: #2e825b;
+}
+.item-china-fit.conditional {
+  color: #b26a3c;
+}
+.item-china-fit.unsuitable {
+  color: #c45656;
 }
 .item-rule {
   margin: 8px 0 0;
@@ -460,9 +529,9 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
   stroke-width: 0.6;
 }
 .lg-grat {
-  stroke: #8bab98;
+  stroke: #a9c8b0;
   stroke-width: 0.9;
-  stroke-dasharray: 2.5 2.5;
+  stroke-dasharray: 2 2;
 }
 .lg-extent {
   fill: rgba(59, 162, 114, 0.12);
@@ -491,6 +560,7 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
     grid-template-columns: 1fr;
   }
   .ctl-select,
+  .ctl-aspect,
   .ctl-num {
     width: 100%;
   }

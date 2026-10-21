@@ -1,4 +1,4 @@
-import type { ProjectionInfo, RegionExtent } from './types'
+import type { ChinaFit, ProjectionInfo, RegionExtent } from './types'
 
 /** 预设区域 — 对应 spec/02 §3.1 FR-1.1（v0.2：按组组织，范围取标准四至） */
 export interface RegionPreset {
@@ -274,6 +274,86 @@ export const PROJECTION_KB: ProjectionInfo[] = [
     epsgHint: 'ESRI:54035（World Equal Earth）；PROJ：+proj=eqearth',
   },
 ]
+
+/**
+ * 中国全图适用性标注（spec/09 §2.4）：用于总览「中国地图投影」模块的徽标与原因说明。
+ * 口径 = 整幅中国全图（73.5°E~135.1°E / 3.8°N~53.6°N，含南海诸岛）成图；
+ * 分带大比例尺地形图（高斯-克吕格）按「有条件适合」处理。
+ */
+export const CHINA_SUITABILITY: Record<string, ChinaFit> = {
+  mercator: {
+    level: 'unsuitable',
+    reason: '等角圆柱投影高纬面积急剧放大，中国南北跨约 50° 纬度，北部面积失真显著，中国全图不采用',
+  },
+  'transverse-mercator': {
+    level: 'conditional',
+    reason: '分带投影：单带内变形极小，但整幅中国东西跨约 60° 经度，离中央经线越远变形越大——只用于 6°/3° 分带的大比例尺地形图，不适合整幅中国全图',
+  },
+  'lambert-conformal-conic': {
+    level: 'fit',
+    reason: '我国 1:100 万地形图与气象图的常用投影，等角保形，中纬东西延展的中国轮廓与之匹配',
+  },
+  'albers-equal-area-conic': {
+    level: 'fit',
+    reason: '中国全图惯例投影（105°E，双标准纬线 25°N/47°N）：面积严格相等，统计专题图首选',
+  },
+  'azimuthal-equidistant': {
+    level: 'unsuitable',
+    reason: '方位投影适合圆形区域（极地、半球）；中国轮廓东西南北跨度大，边缘变形随中心距增大，中国全图不采用',
+  },
+  'polar-stereographic': {
+    level: 'unsuitable',
+    reason: '极地投影以极点为中心，中国位于中低纬，只能被压在图像边缘且变形极大，无法用于中国制图',
+  },
+  'lambert-azimuthal-equal-area': {
+    level: 'unsuitable',
+    reason: '适合大洲与极地等积专题；中国为非圆形区域，边缘角度变形大，不属于中国制图惯例',
+  },
+  'equidistant-cylindrical': {
+    level: 'unsuitable',
+    reason: '经纬网为方格、无等角等积性质，仅作教学演示，中国地图不采用',
+  },
+  'gall-peters': {
+    level: 'unsuitable',
+    reason: '等积但低纬形状强烈拉伸、视觉失真大，中国图不使用',
+  },
+  robinson: {
+    level: 'unsuitable',
+    reason: '为世界全图设计的折中投影，区域制图非其用途；中国全图有更合适的圆锥投影',
+  },
+  'winkel-tripel': {
+    level: 'unsuitable',
+    reason: '世界全图折中投影（全球挂图常用），中国区域制图不采用',
+  },
+  mollweide: {
+    level: 'unsuitable',
+    reason: '全球等积伪圆柱投影，高纬与图幅边缘形状失真大，中国全图不采用',
+  },
+  sinusoidal: {
+    level: 'unsuitable',
+    reason: '低纬无变形、高纬剪切失真大，中国中高纬区域不适用',
+  },
+  polyconic: {
+    level: 'conditional',
+    reason: '国际 1:100 万地图的旧方案（改良多圆锥）：中央经线附近变形小、两侧增大；我国已改用兰伯特等角圆锥，仅作历史参考',
+  },
+  orthographic: {
+    level: 'unsuitable',
+    reason: '正射投影只显示半个地球、边缘强烈压缩，用于「从太空看地球」演示，不能作中国全图',
+  },
+  gnomonic: {
+    level: 'unsuitable',
+    reason: '球心投影只能显示小于半球的范围，远离中心变形急剧增大，用于大圆航线图，不能作中国全图',
+  },
+  'natural-earth': {
+    level: 'unsuitable',
+    reason: '为小比例尺世界地图设计，全球变形均衡，中国区域制图不采用',
+  },
+  'equal-earth': {
+    level: 'unsuitable',
+    reason: '全球等积设计（2018 年提出），用于世界专题图，中国区域不采用',
+  },
+}
 
 export function findProjection(id: string): ProjectionInfo | undefined {
   return PROJECTION_KB.find((p) => p.id === id)
