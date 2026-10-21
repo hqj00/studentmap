@@ -41,8 +41,8 @@ const cell = (info, def, x, y) => {
     <text x="6" y="15" font-size="12" font-family="sans-serif">${PROJECTION_KB.indexOf(info) + 1}. ${info.zhName}（${def.key === 'china' ? '中国' : '世界'}）</text>
     <g transform="translate(0,22)">
       <path d="${L.sphere}" fill="#fbfcfa" stroke="#c9d9c9"/>
-      <path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>
-      ${L.chinaBoundary ? `<path d="${L.chinaBoundary}" fill="rgba(59,162,114,.14)" stroke="#2e7d52" stroke-width="0.9"/>` : ''}
+      ${def.key === 'china' ? '' : `<path d="${L.land}" fill="#e9f2e3" stroke="#b9cfb2" stroke-width="0.6"/>`}
+      ${L.chinaBoundary ? `<path d="${L.chinaBoundary}" fill="#e9f2e3" stroke="#2e7d52" stroke-width="0.9"/>` : ''}
       ${L.chinaTenDash ? `<path d="${L.chinaTenDash}" fill="#2e7d52"/>` : ''}
       <path d="${L.grat}" fill="none" stroke="#8bab98" stroke-width="0.7" stroke-dasharray="2.5 2.5"/>
       ${labels}

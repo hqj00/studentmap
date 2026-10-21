@@ -117,6 +117,8 @@ interface Card {
   no: number
   sphere: string
   land: string
+  /** 是否绘制世界陆地底图（spec/09 §2.5：中国模块默认只用国界图层成图，不叠底图，避免双层绿色重叠） */
+  showLand: boolean
   grat: string
   /** 中国国界轮廓（仅中国模块，spec/09 §2.5） */
   chinaBoundary: string
@@ -154,6 +156,9 @@ function buildCard(info: ProjectionInfo, def: RegionGroupDef): Card {
     no: PROJECTION_KB.indexOf(info) + 1,
     sphere: layers.sphere,
     land: layers.land,
+    // 中国模块默认成图只画国界图层（含台湾、南海诸岛、十段线），不再叠加世界陆地底图（spec/09 §2.5）；
+    // 按坐标查看时该模块已不是中国范围，恢复陆地底图
+    showLand: !(def.key === 'china' && !coordValid.value),
     grat: layers.grat,
     chinaBoundary: layers.chinaBoundary,
     chinaTenDash: layers.chinaTenDash,
@@ -274,7 +279,8 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
           :label="`${c.info.zhName}${c.scopeNote}（可缩放）`"
         >
           <path :d="c.sphere" v-bind="PREVIEW_STYLE.sphere" />
-          <path :d="c.land" v-bind="PREVIEW_STYLE.land" />
+          <!-- 中国模块不叠世界陆地底图（spec/09 §2.5），只画下面的国界图层 -->
+          <path v-if="c.showLand" :d="c.land" v-bind="PREVIEW_STYLE.land" />
           <!-- 中国国界图层（spec/09 §2.5）：国界轮廓 + 南海诸岛十段线，仅中国模块 -->
           <path v-if="c.chinaBoundary" :d="c.chinaBoundary" class="china-border" />
           <path v-if="c.chinaTenDash" :d="c.chinaTenDash" class="china-nine-dash" />
@@ -484,7 +490,8 @@ const legendH = computed(() => 11 + legendRows.value.length * 8.5)
 
 /* 图面整饰样式（spec/09 §3） */
 .china-border {
-  fill: rgba(59, 162, 114, 0.14);
+  /* 国界图层自带陆地填充（与陆地同色），中国模块不再叠底图，避免两层绿色重叠 */
+  fill: #e9f2e3;
   stroke: #2e7d52;
   stroke-width: 0.9;
 }
