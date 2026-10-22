@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import type { MapPurpose, RecommendRequest, Recommendation, RegionExtent } from '@/modules/projection/types'
 import { PURPOSE_LABELS, PROPERTY_LABELS, CATEGORY_LABELS } from '@/modules/projection/types'
 import { REGION_PRESETS, extentText, resolveExtent } from '@/modules/projection/presets'
+import { provincePlaces, cityPlaces, countryPlaces, findPlace, placeKey, placeLabel } from '@/modules/projection/places'
 import { recommendByRule } from '@/modules/projection/ruleEngine'
 import { recommendByAI, aiAvailable } from '@/modules/projection/aiClient'
 import { effectiveParams } from '@/modules/projection/params'
@@ -50,6 +51,21 @@ function onPickExtent(e: RegionExtent) {
   form.regionMode = 'extent'
   form.extent = { ...e }
   ElMessage.success(`已框选范围：${extentText(e)}`)
+}
+
+/** 位置搜索（spec/10 §3）：选中地名后自动填四至并立即触发推荐 */
+const placeQuery = ref('')
+const pickedPlace = ref('')
+
+function onPickPlace(key: string) {
+  if (!key) return
+  const place = findPlace(key)
+  if (!place) return
+  form.regionMode = 'extent'
+  form.extent = { minLon: place.b[0], minLat: place.b[1], maxLon: place.b[2], maxLat: place.b[3] }
+  pickedPlace.value = placeLabel(place)
+  ElMessage.success(`已按「${placeLabel(place)}」填入四至：${extentText(form.extent)}`)
+  submit()
 }
 
 function validate(): string | null {
@@ -173,6 +189,29 @@ async function copyText(text: string, label: string) {
             <p class="picker-hint">
               在地图上按住拖拽框选，自动填入四至（当前范围：{{ extentText(currentExtent) }}）
             </p>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="form.regionMode === 'extent'" label="搜索位置">
+          <div class="picker-wrap">
+            <el-select
+              v-model="placeQuery"
+              filterable
+              clearable
+              placeholder="搜：中国省份 / 中国城市 / 世界国家（选中自动填四至并推荐）"
+              class="place-select"
+              @change="onPickPlace"
+            >
+              <el-option-group label="中国省份">
+                <el-option v-for="p in provincePlaces" :key="placeKey(p)" :value="placeKey(p)" :label="`${p.n} · 省份`" />
+              </el-option-group>
+              <el-option-group label="中国城市">
+                <el-option v-for="p in cityPlaces" :key="placeKey(p)" :value="placeKey(p)" :label="`${p.n} · ${p.p}`" />
+              </el-option-group>
+              <el-option-group label="世界国家">
+                <el-option v-for="p in countryPlaces" :key="placeKey(p)" :value="placeKey(p)" :label="`${p.n} · ${p.e}`" />
+              </el-option-group>
+            </el-select>
+            <p v-if="pickedPlace" class="picker-hint">已按「{{ pickedPlace }}」填入四至并自动推荐</p>
           </div>
         </el-form-item>
         <el-form-item label="地图用途">
@@ -315,6 +354,10 @@ async function copyText(text: string, label: string) {
 .preset-select {
   width: 380px;
 }
+.place-select {
+  width: 420px;
+  max-width: 100%;
+}
 .opt-label {
   float: left;
 }
@@ -424,6 +467,7 @@ async function copyText(text: string, label: string) {
     grid-template-columns: 1fr;
   }
   .preset-select,
+  .place-select,
   .purpose-select {
     width: 100%;
   }
