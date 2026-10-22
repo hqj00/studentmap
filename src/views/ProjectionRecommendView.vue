@@ -191,7 +191,7 @@ async function copyText(text: string, label: string) {
             </p>
           </div>
         </el-form-item>
-        <el-form-item v-if="form.regionMode === 'extent'" label="搜索位置">
+        <el-form-item label="搜索位置">
           <div class="picker-wrap">
             <el-select
               v-model="placeQuery"

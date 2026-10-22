@@ -2446,7 +2446,7 @@ function buildPreviewLayers(info, extent, width, height, marker, opts) {
   const markerPt = marker ? proj(marker) ?? null : null;
   const lonSpan = extent.maxLon - extent.minLon;
   const latSpan = extent.maxLat - extent.minLat;
-  const radius = Math.min(6, Math.max(1.5, Math.min(lonSpan, latSpan) / 10));
+  const radius = Math.min(6, Math.min(lonSpan, latSpan) / 10);
   const circle = circle_default().radius(radius);
   const tissot = [];
   for (let i = 0; i < 4; i++) {

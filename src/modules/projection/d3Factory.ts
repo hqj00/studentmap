@@ -371,7 +371,8 @@ export function buildPreviewLayers(
   // Tissot：区域内 4×3 布点的等半径小圆，投影后的形变直观反映面积/角度变形
   const lonSpan = extent.maxLon - extent.minLon
   const latSpan = extent.maxLat - extent.minLat
-  const radius = Math.min(6, Math.max(1.5, Math.min(lonSpan, latSpan) / 10))
+  // 半径只随范围缩小、不设下限：小范围（澳门/区县级）若按 1.5° 下限，Tissot 会占满整幅图
+  const radius = Math.min(6, Math.min(lonSpan, latSpan) / 10)
   const circle = geoCircle().radius(radius)
   const tissot: string[] = []
   for (let i = 0; i < 4; i++) {
